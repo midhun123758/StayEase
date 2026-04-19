@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User
+from .models import KycDocument, User
 
 
 class Profile(serializers.ModelSerializer):
@@ -18,3 +18,45 @@ class Profile(serializers.ModelSerializer):
             role=validated_data.get('role', 'user')
         )
         return user
+    
+class sendOTpSerilaizer(serializers.Serializer):
+    email=serializers.EmailField()
+
+class verifyOTPSerilaizer(serializers.Serializer):
+    email=serializers.EmailField()
+    otp=serializers.CharField(max_length=6)
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(min_length=6)
+
+class KYCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KycDocument
+        fields = [
+            "full_name",
+            "phone",
+            "address",
+            "latitude",
+            "longitude",
+            "id_proof",
+        ]
+
+    def validate(self, data):
+        # 🔹 Required fields
+        required_fields = [
+            "full_name",
+            "phone",
+            "address",
+            "latitude",
+            "longitude",
+            "id_proof",
+        ]
+
+        for field in required_fields:
+            if not data.get(field):
+                raise serializers.ValidationError(
+                    {field: f"{field.replace('_', ' ').capitalize()} is required"}
+                )
+
+        return data

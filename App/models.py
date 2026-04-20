@@ -56,3 +56,6 @@ class KycDocument(models.Model):
     latitude = models.FloatField()
     longitude = models.FloatField()
     status = models.CharField(max_length=10, default='pending')
+
+
+

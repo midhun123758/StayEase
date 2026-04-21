@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'Base_Panel',
+    'Client_panel',
 ]
 
 # ─── Middleware ───────────────────────────────────────────────────────────────

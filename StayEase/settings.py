@@ -28,6 +28,7 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # ─── Installed Apps ──────────────────────────────────────────────────────────
 INSTALLED_APPS = [
+      "daphne",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'Base_Panel',
     'Client_panel',
+    "channels"
 ]
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
@@ -71,9 +73,20 @@ TEMPLATES = [
         },
     },
 ]
+ASGI_APPLICATION = "StayEase.asgi.application"
 
 WSGI_APPLICATION = 'StayEase.wsgi.application'
 
+
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 # ─── Database ────────────────────────────────────────────────────────────────
 DATABASES = {
     'default': {

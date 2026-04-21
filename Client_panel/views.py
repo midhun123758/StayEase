@@ -37,3 +37,16 @@ class SearchHostelView(APIView):
         c = 2 * math.asin(math.sqrt(a))
 
         return R * c
+    
+
+class HostelDetailView(APIView):
+    def get(self,request,hostel_id):
+        try:
+            hostel=Hostel.objects.get(id=hostel_id)
+            serilaizer=HostelSerializer(hostel)
+            return Response(serilaizer.data)
+        except Hostel.DoesNotExist:
+            return Response({"error":"Hostel not found"},status=404)
+        except Exception as e:
+            return Response({"error":str(e)},status=500)        
+        

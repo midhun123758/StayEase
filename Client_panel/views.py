@@ -3,6 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from Base_Panel.models import Hostel
 from .serializers import HostelSerializer
+from .models import Enquiry
+from rest_framework.permissions import IsAuthenticated
 
 class SearchHostelView(APIView):
     def post(self, request):
@@ -50,3 +52,25 @@ class HostelDetailView(APIView):
         except Exception as e:
             return Response({"error":str(e)},status=500)        
         
+
+class CreateEnquiryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, hostel_id):
+        try:
+            hostel = Hostel.objects.get(id=hostel_id)
+        except Hostel.DoesNotExist:
+            return Response({"error": "Hostel not found"}, status=404)
+
+        enquiry = Enquiry.objects.create(
+            user=request.user,
+            hostel=hostel,
+            full_name=request.data.get("full_name"),
+            email=request.data.get("email"),
+            phone=request.data.get("phone"),
+            preferred_date=request.data.get("preferred_date"),
+            stay_days=request.data.get("stay_days"),
+            message=request.data.get("message"),
+        )
+
+        return Response({"message": "Enquiry sent successfully"}, status=201)

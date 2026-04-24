@@ -38,10 +38,8 @@ class Enquiry(models.Model):
     full_name = models.CharField(max_length=255)
     email = models.EmailField()
     phone = models.CharField(max_length=15)
-
-    preferred_date = models.DateField()
-    stay_days = models.PositiveIntegerField()
-
+    preferred_date = models.DateField(null=True, blank=True)
+    stay_months = models.IntegerField(default=1)
     message = models.TextField(blank=True, null=True)
 
     status = models.CharField(

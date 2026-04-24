@@ -69,7 +69,7 @@ class CreateEnquiryView(APIView):
             email=request.data.get("email"),
             phone=request.data.get("phone"),
             preferred_date=request.data.get("preferred_date"),
-            stay_days=request.data.get("stay_days"),
+            stay_months=request.data.get("stay_months"),
             message=request.data.get("message"),
         )
 

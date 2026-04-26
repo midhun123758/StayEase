@@ -23,7 +23,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
 
-  redis:   # ✅ NOW inside services
+  redis:
     image: redis:7
     container_name: stayease_redis
     ports:

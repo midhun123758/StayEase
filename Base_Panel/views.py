@@ -12,5 +12,4 @@ class HostelListView(APIView):
         if serializer.is_valid():
             serializer.save(owner=request.user)
             return Response(serializer.data, status=201)
-
         return Response(serializer.errors, status=400)

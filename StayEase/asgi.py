@@ -1,15 +1,17 @@
 import os
-from channels.routing import ProtocolTypeRouter, URLRouter
+import django
 from django.core.asgi import get_asgi_application
-from channels.auth import AuthMiddlewareStack   # ✅ ADD THIS
-import Client_panel.routing
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "StayEase.settings")
+django.setup()
+
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
+import Client_panel.routing  # Double check this is your app name!
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-
-    "websocket": AuthMiddlewareStack(   # ✅ WRAP WITH THIS
+    "websocket": AuthMiddlewareStack(
         URLRouter(
             Client_panel.routing.websocket_urlpatterns
         )

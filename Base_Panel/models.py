@@ -18,6 +18,7 @@ class Hostel(models.Model):
     contact_number = models.CharField(max_length=15, blank=True, null=True)
     def __str__(self):
         return self.name
+    
 class Room(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name='rooms')                                                
     room_number = models.CharField(max_length=10)
@@ -35,3 +36,15 @@ class HostelImage(models.Model):
 
     def __str__(self):
         return f"Image of {self.hostel.name}"
+    
+
+    
+
+class ChatRoom(models.Model):
+    hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="chatrooms")
+    client = models.ForeignKey(User, on_delete=models.CASCADE, related_name="client_rooms")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="owner_rooms")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.client.username} - {self.hostel.name}"

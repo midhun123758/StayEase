@@ -5,6 +5,11 @@ from Base_Panel.models import Hostel
 from .serializers import HostelSerializer
 from .models import Enquiry
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q
+from .models import HostelMessage
+from App.models import User
+from rest_framework.permissions import IsAuthenticated
+from Base_Panel.models import ChatRoom
 
 class SearchHostelView(APIView):
     def post(self, request):
@@ -74,3 +79,44 @@ class CreateEnquiryView(APIView):
         )
 
         return Response({"message": "Enquiry sent successfully"}, status=201)
+    
+
+
+
+class UserDetailView(APIView):
+    """
+    REQUIRED: Fixes the 404 [object Object] error by providing 
+    the host's info to the chat header.
+    """
+    def get(self, request, user_id):
+        user_obj = get_object_or_404(User, id=user_id)
+        return Response({
+            "id": user_obj.id,
+            "username": user_obj.username,
+            "email": user_obj.email
+        })
+
+
+
+
+class ChatHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, hostel_id):
+        # We search for ALL messages in ANY room belonging to this student and hostel
+        messages = HostelMessage.objects.filter(
+            chatroom__hostel_id=hostel_id,
+            chatroom__client=request.user
+        ).order_by('created_at')
+
+        data = [
+            {
+                "id": m.id,
+                "message": m.message,
+                "sender": m.sender.username,
+                "sender_id": m.sender.id,
+                "created_at": m.created_at,
+            }
+            for m in messages
+        ]
+        return Response(data)

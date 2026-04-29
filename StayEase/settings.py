@@ -12,7 +12,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ─── Security ────────────────────────────────────────────────────────────────
-SECRET_KEY = 'django-insecure-zk=_#&t2$3ko-u5+@z)5h#!8nw45msx2&*@vz51eju(w8=s5=q'
+SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -23,7 +23,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# ✅ Fixes Google OAuth popup postMessage warning
+
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # ─── Installed Apps ──────────────────────────────────────────────────────────
@@ -41,11 +41,12 @@ INSTALLED_APPS = [
     'corsheaders',
     'Base_Panel',
     'Client_panel',
-    "channels"
+    "channels",
+    "phonenumber_field"
 ]
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
-# ✅ CorsMiddleware must be FIRST
+#
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
@@ -122,7 +123,8 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-
+# settings.py
+PHONENUMBER_DEFAULT_REGION = "IN"
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

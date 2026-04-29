@@ -38,8 +38,6 @@ class HostelImage(models.Model):
         return f"Image of {self.hostel.name}"
     
 
-    
-
 class ChatRoom(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="chatrooms")
     client = models.ForeignKey(User, on_delete=models.CASCADE, related_name="client_rooms")

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from Base_Panel.models import Hostel
 from .serializers import HostelSerializer
 from .models import Enquiry
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
 from .models import HostelMessage
 from App.models import User
@@ -12,11 +12,12 @@ from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import ChatRoom
 
 class SearchHostelView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         user_lat = float(request.data.get("latitude"))
         user_lng = float(request.data.get("longitude"))
 
-        radius_km = 20  # 🔥 change this (10km, 20km, etc.)
+        radius_km = 20  
 
         nearby_hostels = []
 
@@ -28,7 +29,6 @@ class SearchHostelView(APIView):
 
             if distance <= radius_km:
                 nearby_hostels.append(hostel)
-
         serializer = HostelSerializer(nearby_hostels, many=True)
         return Response(serializer.data)
 
@@ -59,7 +59,7 @@ class HostelDetailView(APIView):
         
 
 class CreateEnquiryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request, hostel_id):
         try:
@@ -120,3 +120,10 @@ class ChatHistoryView(APIView):
             for m in messages
         ]
         return Response(data)
+    
+
+# class All_hostels(APIView):
+#     def get(self,request):
+#         hostels=Hostel.objects.all()
+#         serializer=HostelSerializer(hostels,many=True)
+#         return Response(serializer.data)

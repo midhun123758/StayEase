@@ -3,7 +3,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-
+from phonenumber_field.modelfields import PhoneNumberField
 
 class User(AbstractUser):
 
@@ -47,7 +47,7 @@ class PasswordResetOTP(models.Model):
 class KycDocument(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     full_name = models.CharField(max_length=100)
-    phone = models.CharField(max_length=15)
+    phone = PhoneNumberField()
     id_proof = models.FileField(upload_to='kyc/id_proofs/')
     address = models.TextField()
     latitude = models.FloatField()

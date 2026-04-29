@@ -15,7 +15,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.user = await self.get_user(user_id)
 
         try:
-            # We store the ID only to keep the consumer light and avoid stale data
             chatroom = await self.get_or_create_chatroom()
             self.chatroom_id = chatroom.id
             self.room_group = f"chat_{self.chatroom_id}"
@@ -36,8 +35,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not message_text:
             return
 
-        # ✅ FIXED: Dynamically fetch the receiver and save in one atomic DB operation
-        # This prevents the "2 message limit" caused by stale local variables
         msg_data = await self.save_and_get_data(message_text)
 
         await self.channel_layer.group_send(
@@ -72,10 +69,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_and_get_data(self, message_text):
-        # Re-fetch room to ensure we have the latest client/owner instances
+     
         room = ChatRoom.objects.get(id=self.chatroom_id)
         
-        # Logic: If I am the client, receiver is owner. Otherwise, receiver is client.
+      
         if self.user.id == room.client.id:
             receiver = room.owner
         else:
@@ -102,18 +99,12 @@ def save_message_safely(self, message_text):
     from .models import ChatRoom, HostelMessage
     from App.models import User # Adjust import path as needed
     
-    # 1. Fetch the room using the ID we stored during connect
     room = ChatRoom.objects.select_related('client', 'owner').get(id=self.chatroom_id)
-    
-    # 2. DYNAMIC RECEIVER LOGIC
-    # If the current sender is the student (client), the receiver is the owner.
-    # If the current sender is the owner, the receiver is the student (client).
     if self.user.id == room.client.id:
         target_receiver = room.owner
     else:
         target_receiver = room.client
 
-    # 3. Create the record
     return HostelMessage.objects.create(
         chatroom=room,
         sender=self.user,

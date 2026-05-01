@@ -46,3 +46,38 @@ class ChatRoom(models.Model):
 
     def __str__(self):
         return f"{self.client.username} - {self.hostel.name}"
+
+class Hostler(models.Model):
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="hostlers"
+    )
+
+    hostel = models.ForeignKey(
+        Hostel,
+        on_delete=models.CASCADE,
+        related_name="hostlers"
+    )
+
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hostlers"
+    )
+
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=15)
+    email = models.EmailField(blank=True, null=True)
+
+    check_in_date = models.DateField()
+    check_out_date = models.DateField(null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

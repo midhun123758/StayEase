@@ -5,3 +5,7 @@ python-dotenv
 django-cors-headers
 Pillow
 requests
+grpcio
+grpcio-tools
+protobuf
+djangorestframework-simplejwt

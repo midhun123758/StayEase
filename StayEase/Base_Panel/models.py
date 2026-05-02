@@ -19,6 +19,19 @@ class Hostel(models.Model):
     def __str__(self):
         return self.name
     
+
+class HostelDocument(models.Model):
+    hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="documents")
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    file_url = models.URLField()   # S3 link
+    document_type = models.CharField(max_length=50)
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+
+
+
 class Room(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name='rooms')                                                
     room_number = models.CharField(max_length=10)

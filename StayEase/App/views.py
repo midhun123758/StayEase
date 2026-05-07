@@ -11,7 +11,7 @@ from .serializer import sendOTpSerilaizer, verifyOTPSerilaizer, ResetPasswordSer
 import random
 from django.core.mail import send_mail
 from django.conf import settings
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 # 🔐 LOGIN VIEW
 class login_view(APIView):
     def post(self, request):
@@ -277,25 +277,77 @@ class VerifyOTPView(APIView):
 
         return Response({"message": "OTP verified"})
 
-
 class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
+
+        # Get data from frontend
         email = request.data.get("email")
-        new_password = request.data.get("password")
+        new_password = request.data.get("new_password")
+        confirm_password = request.data.get("confirm_password")
+
+        # Validate fields
+        if not email or not new_password or not confirm_password:
+            return Response(
+                {"error": "Email and password are required"},
+                status=400
+            )
+
+        # Check password match
+        if new_password != confirm_password:
+            return Response(
+                {"error": "Passwords do not match"},
+                status=400
+            )
 
         try:
-            user = User.objects.get(email=email)
-            otp_obj = PasswordResetOTP.objects.get(user=user, is_verified=True)
-        except:
-            return Response({"error": "OTP not verified"}, status=400)
+            # Find user
+            user = User.objects.get(email__iexact=email)
 
-        user.set_password(new_password)
-        user.save()
+            # Check verified OTP
+            otp_obj = PasswordResetOTP.objects.get(
+                user=user,
+                is_verified=True
+            )
 
-        otp_obj.delete()
+            # Set new password (hashed securely)
+            user.set_password(new_password)
 
-        return Response({"message": "Password reset successful"})
+            # Activate account if inactive
+            user.is_active = True
 
+            # Remove google-only restriction if exists
+            if hasattr(user, "is_google_user"):
+                user.is_google_user = False
+
+            user.save()
+
+            # Delete used OTP
+            otp_obj.delete()
+
+            return Response(
+                {"message": "Password reset successful"},
+                status=200
+            )
+
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User not found"},
+                status=404
+            )
+
+        except PasswordResetOTP.DoesNotExist:
+            return Response(
+                {"error": "OTP not verified"},
+                status=400
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=500
+            )
 def verify_captcha(token):
     url = "https://www.google.com/recaptcha/api/siteverify"
     data = {

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Hostel,Hostler,Room
 from .models import User
-
+from Client_panel.models import Enquiry 
 class HostelSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.id')
     class Meta:
@@ -124,4 +124,37 @@ class HostlerSerializer(serializers.ModelSerializer):
             "check_in_date",
             "check_out_date",
             "is_active",
+        ]
+
+class RoomSerializer(serializers.ModelSerializer):
+    hostlers = HostlerSerializer(many=True, read_only=True)
+    class Meta:
+        model = Room
+        fields = ['id', 'room_number', 'room_type', 'price', 'is_available', 'hostlers','bed_space']
+        read_only_fields = ['id']
+
+class EnquirySerializer(serializers.ModelSerializer):
+    # These fields pull data from the related models for easy display
+    hostel_name = serializers.ReadOnlyField(source='hostel.name')
+    # get_status_display returns 'Pending' instead of 'pending'
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    # Formats the date to a readable string (e.g., "08 May 2026")
+    created_at = serializers.DateTimeField(format="%d %b %Y", read_only=True)
+
+    class Meta:
+        model = Enquiry
+        fields = [
+            'id',
+            'full_name',
+            'email',
+            'phone',
+            'preferred_date',
+            'stay_months',
+            'message',
+            'status',
+            'status_display',
+            'hostel',
+            'hostel_name',
+            'created_at',
+            'updated_at',
         ]

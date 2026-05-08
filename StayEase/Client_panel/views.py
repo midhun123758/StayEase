@@ -103,11 +103,23 @@ class ChatHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, hostel_id):
-        # We search for ALL messages in ANY room belonging to this student and hostel
-        messages = HostelMessage.objects.filter(
-            chatroom__hostel_id=hostel_id,
-            chatroom__client=request.user
-        ).order_by('created_at')
+        # The Owner sends this as ?client_id=X
+        client_id = request.query_params.get('client_id')
+
+        if client_id:
+            # CASE: Owner is viewing history
+            # We filter by the client_id passed from the sidebar
+            messages = HostelMessage.objects.filter(
+                chatroom__hostel_id=hostel_id,
+                chatroom__client_id=client_id,
+                chatroom__owner=request.user
+            ).order_by('created_at')
+        else:
+            # CASE: Client is viewing history
+            messages = HostelMessage.objects.filter(
+                chatroom__hostel_id=hostel_id,
+                chatroom__client=request.user
+            ).order_by('created_at')
 
         data = [
             {
@@ -120,7 +132,6 @@ class ChatHistoryView(APIView):
             for m in messages
         ]
         return Response(data)
-    
 
 # class All_hostels(APIView):
 #     def get(self,request):

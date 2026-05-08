@@ -1,7 +1,7 @@
 from django.db import models
 # Create your models here.
 from App.models import User
-
+from django.conf import settings
 class Hostel(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hostels')
     name = models.CharField(max_length=255)
@@ -15,7 +15,12 @@ class Hostel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     rooms_available = models.IntegerField(default=0)
+    mess_service =models.BooleanField(default=False)  # True if sent by messaging service, False if sent by user
     contact_number = models.CharField(max_length=15, blank=True, null=True)
+    image1=models.ImageField(upload_to="hostels/", blank=True, null=True)
+    image2=models.ImageField(upload_to="hostels/", blank=True, null=True)
+    image3=models.ImageField(upload_to="hostels/", blank=True, null=True)
+    image4=models.ImageField(upload_to="hostels/", blank=True, null=True)
     def __str__(self):
         return self.name
     
@@ -36,6 +41,7 @@ class Room(models.Model):
     room_type = models.CharField(max_length=50)     
     price = models.DecimalField(max_digits=10, decimal_places=2)
     is_available = models.BooleanField(default=True)        
+    bed_space =models.IntegerField(default=1)  # Number of bed spaces in the room
 
     def __str__(self):
         return f"Room {self.room_number} - {self.room_type}"        
@@ -62,7 +68,6 @@ class Hostler(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="managed_hostlers")
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="hostlers")
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, blank=True, related_name="hostlers")
-
     phone = models.CharField(max_length=15)
     check_in_date = models.DateField()
     check_out_date = models.DateField(null=True, blank=True)
@@ -71,3 +76,38 @@ class Hostler(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.hostel.name}"
+
+MEAL_TYPES = [
+    ('BRK', 'Breakfast'),
+    ('LNC', 'Lunch'),
+    ('DIN', 'Dinner'),
+]
+
+class MealTemplate(models.Model):
+    """ Pre-defined meals created by the system or owner """
+    name = models.CharField(max_length=100)
+    default_meal_type = models.CharField(max_length=3, choices=MEAL_TYPES)
+    
+    def __str__(self):
+        return self.name
+
+
+class AssignedMeal(models.Model):
+    hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE)
+    date = models.DateField()
+    meal_type = models.CharField(max_length=3, choices=MEAL_TYPES)
+    
+    # Link to the predicted meal library
+    meal_item = models.ForeignKey(MealTemplate, on_delete=models.SET_NULL, null=True)
+    
+    # Interaction Logic
+    likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked_meals', blank=True)
+    dislikes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='disliked_meals', blank=True)
+
+    @property
+    def total_likes(self):
+        return self.likes.count()
+
+    @property
+    def total_dislikes(self):
+        return self.dislikes.count()

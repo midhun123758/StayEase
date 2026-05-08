@@ -1,13 +1,14 @@
 from django.shortcuts import render
-from .models import Hostel, HostelDocument, Hostler, Room_image
+from .models import ChatRoom, Hostel, HostelDocument, Hostler, Room_image
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response            
-from .serilalizers import HostelSerializer, HostlerCreateSerializer, HostlerSerializer
+from .serilalizers import EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer
 from rest_framework.permissions import IsAuthenticated
 from .utils.s3 import generate_presigned_url
 from .models import Room
-from .serilalizers import RoomSerializer    
+from .serilalizers import RoomSerializer   
+from Client_panel.models import Enquiry
 
 class HostelListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -26,19 +27,45 @@ class AddHostlerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        room_id = request.data.get("room")
+        try:
+            room = Room.objects.get(id=room_id)
+
+        except Room.DoesNotExist:
+            return Response(
+                {"error": "Room not found"},
+                status=404
+            )
+
+        # Count current hostlers in room
+        current_hostlers = Hostler.objects.filter(
+            room=room
+        ).count()
+
+        # Check bed space
+        if current_hostlers >= room.bed_space:
+            return Response(
+                {"error": "This room is already full."},
+                status=400
+            )
+
         serializer = HostlerCreateSerializer(
             data=request.data,
             context={"request": request}
         )
 
         if serializer.is_valid():
+
             user = serializer.save()
 
             hostler = Hostler.objects.get(user=user)
 
             response_serializer = HostlerSerializer(hostler)
 
-            return Response(response_serializer.data, status=201)
+            return Response(
+                response_serializer.data,
+                status=201
+            )
 
         return Response(serializer.errors, status=400)
 
@@ -118,3 +145,35 @@ class AddRoomView(APIView):
             }, status=201)
 
         return Response(serializer.errors, status=400)
+
+class Room_listView(APIView):
+    def get(self, request):
+        rooms= Room.objects.filter(hostel__owner=request.user)
+        serializer = RoomSerializer(rooms, many=True)
+        return Response(serializer.data)
+    
+
+class EnquiryListView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        enqueries = Enquiry.objects.filter(hostel__owner=request.user)
+        serializer = EnquirySerializer(enqueries, many=True)
+        return Response(serializer.data)
+# views.py
+class OwnerChatListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Filter ChatRooms where the logged-in user is the owner
+        rooms = ChatRoom.objects.filter(owner=request.user).select_related('client', 'hostel')
+        
+        data = [{
+            "id": r.id,
+            "client": r.client.id, # Key: 'client' matches the query_param logic
+            "client_username": r.client.username,
+            "hostel": r.hostel.id, # Key: 'hostel' matches the URL logic
+            "hostel_name": r.hostel.name,
+            "last_message_preview": r.messages.last().message if r.messages.exists() else ""
+        } for r in rooms]
+        
+        return Response(data)

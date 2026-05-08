@@ -8,11 +8,12 @@ from Base_Panel.models import Hostel
 User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
+    
     async def connect(self):
-        self.hostel_id = self.scope['url_route']['kwargs']['room_id']
-        user_id = self.scope['url_route']['kwargs']['user_id']
+        self.hostel_id = self.scope['url_route']['kwargs']['hostel_id']
+        self.user_id = self.scope['url_route']['kwargs']['user_id']
         
-        self.user = await self.get_user(user_id)
+        self.user = await self.get_user(self.user_id)
 
         try:
             chatroom = await self.get_or_create_chatroom()
@@ -22,7 +23,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_add(self.room_group, self.channel_name)
             await self.accept()
         except Exception as e:
-            print(f"WebSocket Connection error: {e}")
+            print(f"Connection Error: {e}")
             await self.close()
 
     async def disconnect(self, close_code):
@@ -45,7 +46,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 "sender": msg_data["sender_name"],
                 "sender_id": msg_data["sender_id"],
                 "timestamp": msg_data["timestamp"],
-                "tempId": data.get("tempId") # Echo back for React Optimistic UI
+                "tempId": data.get("tempId") 
             }
         )
 
@@ -58,21 +59,33 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_or_create_chatroom(self):
-        from Base_Panel.models import Hostel
         hostel = Hostel.objects.get(id=self.hostel_id)
-        room, created = ChatRoom.objects.get_or_create(
-          hostel=hostel,
-          client=self.user,
-          defaults={'owner': hostel.owner})
-        return room
-        
+    
+        # CASE 1: The person connecting is the OWNER
+        if self.user.id == hostel.owner.id:
+            query_params = self.scope['query_string'].decode()
+            client_id = query_params.split('client_id=')[-1] if 'client_id=' in query_params else None
+            
+            if not client_id:
+                raise Exception("Owner must provide a client_id to join a chat.")
+            
+            # Fixed alignment and return
+            return ChatRoom.objects.get(hostel=hostel, client_id=client_id, owner=self.user)
+
+        # CASE 2: The person connecting is the CLIENT
+        else:
+            room, created = ChatRoom.objects.get_or_create(
+                hostel=hostel,
+                client=self.user,
+                defaults={'owner': hostel.owner}
+            )
+            return room
 
     @database_sync_to_async
     def save_and_get_data(self, message_text):
-     
         room = ChatRoom.objects.get(id=self.chatroom_id)
         
-      
+        # Decide who receives the message
         if self.user.id == room.client.id:
             receiver = room.owner
         else:
@@ -92,22 +105,3 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "timestamp": msg.created_at.isoformat()
         }
     
-    # consumers.py
-
-@database_sync_to_async
-def save_message_safely(self, message_text):
-    from .models import ChatRoom, HostelMessage
-    from App.models import User # Adjust import path as needed
-    
-    room = ChatRoom.objects.select_related('client', 'owner').get(id=self.chatroom_id)
-    if self.user.id == room.client.id:
-        target_receiver = room.owner
-    else:
-        target_receiver = room.client
-
-    return HostelMessage.objects.create(
-        chatroom=room,
-        sender=self.user,
-        receiver=target_receiver,
-        message=message_text
-    )

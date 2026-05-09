@@ -73,6 +73,7 @@ class Hostler(models.Model):
     check_out_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     parent_number= models.CharField(max_length=15, blank=True, null=True)
+    fees= models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     def __str__(self):
         return f"{self.user.username} - {self.hostel.name}"
@@ -87,7 +88,8 @@ class MealTemplate(models.Model):
     """ Pre-defined meals created by the system or owner """
     name = models.CharField(max_length=100)
     default_meal_type = models.CharField(max_length=3, choices=MEAL_TYPES)
-    
+    hostel= models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="meal_templates")
+    is_deleted= models.BooleanField(default=False)  # Soft delete flag
     def __str__(self):
         return self.name
 

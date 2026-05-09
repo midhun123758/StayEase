@@ -1,12 +1,12 @@
 from rest_framework import serializers
-from .models import Hostel,Hostler,Room
+from .models import AssignedMeal, Hostel,Hostler, MealTemplate,Room
 from .models import User
 from Client_panel.models import Enquiry 
 class HostelSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.id')
     class Meta:
         model = Hostel
-        fields = ['id', 'owner', 'name', 'address', 'location', 'latitude', 'longitude', 'city', 'state', 'description'] 
+        fields = ['id', 'owner', 'name', 'address', 'location', 'latitude', 'longitude', 'city', 'state', 'description','rooms_available','mess_service','contact_number','image1','image2','image3','image4'] 
 
 
 class HostlerCreateSerializer(serializers.ModelSerializer):
@@ -158,3 +158,18 @@ class EnquirySerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+class MealTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MealTemplate
+        fields = ['id', 'name', 'default_meal_type', 'hostel']
+
+class AssignedMealSerializer(serializers.ModelSerializer):
+    # This shows the meal name in the response so the frontend doesn't just see an ID
+    meal_name = serializers.CharField(source='meal_item.name', read_only=True)
+    
+    class Meta:
+        model = AssignedMeal
+        fields = ['id', 'hostel', 'date', 'meal_type', 'meal_item', 'meal_name', 'total_likes', 'total_dislikes',]
+
+

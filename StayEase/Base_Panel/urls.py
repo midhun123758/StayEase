@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import AddHostlerView, AddRoomView, EnquiryListView, GenerateUploadURL, HostelListView,AddDocument, Room_listView,my_hostlers,OwnerChatListView
+from .views import AddHostlerView, AddRoomView, DailyMealAssignmentView, EnquiryListView, GenerateUploadURL, HostelListView,AddDocument, Room_listView,my_hostlers,OwnerChatListView,Meal_assignmentView
 urlpatterns = [
     path('add_hostel/', HostelListView.as_view(), name='add_hostel'),
     path("generate-upload-url/", GenerateUploadURL.as_view()),
@@ -9,5 +9,8 @@ urlpatterns = [
     path("add-room/", AddRoomView.as_view(), name="add_room"),
     path("room-list/", Room_listView.as_view(), name="room_list"),
     path("enquiry-list/", EnquiryListView.as_view(), name="enquiry_list"),
-    path("chatrooms/", OwnerChatListView.as_view(), name="owner_chatrooms")
+    path("chatrooms/", OwnerChatListView.as_view(), name="owner_chatrooms"),
+
+    path("meal-templates/", Meal_assignmentView.as_view(), name="meal_templates"),
+    path("daily-assignments/", DailyMealAssignmentView.as_view(), name="daily_assignments")
 ]

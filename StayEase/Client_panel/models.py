@@ -38,8 +38,8 @@ class Enquiry(models.Model):
         ('pending', 'Pending'),
         ('responded', 'Responded'),
         ('closed', 'Closed'),
+        ('accepted by owner', 'Accepted by Owner'),
     ]
-
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='enquiries'
     )

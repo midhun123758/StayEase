@@ -1,3 +1,6 @@
+
+from django.utils import timezone
+from datetime import timedelta
 from django.db import models
 # Create your models here.
 from App.models import User
@@ -73,7 +76,9 @@ class Hostler(models.Model):
     check_out_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     parent_number= models.CharField(max_length=15, blank=True, null=True)
-    fees= models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # fees= models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    monthly_rent = models.DecimalField(max_digits=10, decimal_places=2,default=0.00)
+    joining_date = models.DateField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.hostel.name}"
@@ -113,3 +118,27 @@ class AssignedMeal(models.Model):
     @property
     def total_dislikes(self):
         return self.dislikes.count()
+    
+# class Payment_view(models.Model):
+#     user = models.ForeignKey(User, on_delete=models.CASCADE)
+#     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE)
+#     amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    
+class Transaction(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('overdue', 'Overdue'),
+    ]
+    hostler = models.ForeignKey(Hostler, on_delete=models.CASCADE, related_name='transactions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    billing_date = models.DateField(auto_now_add=True) 
+    due_date = models.DateField(null=True, blank=True) 
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    def save(self, *args, **kwargs):
+        if not self.due_date:
+            # Deadline is 30 days from the bill generation
+            self.due_date = timezone.now().date() + timedelta(days=30)
+        super().save(*args, **kwargs)

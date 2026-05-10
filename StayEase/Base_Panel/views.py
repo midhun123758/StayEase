@@ -1,15 +1,21 @@
+
+from django.utils import timezone
 from django.shortcuts import render
-from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, Room_image
+from rest_framework import status
+from App.models import User
+from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, Room_image, Transaction
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response            
-from .serilalizers import AssignedMealSerializer, EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer
+from .serilalizers import AssignedMealSerializer, EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer
 from rest_framework.permissions import IsAuthenticated
 from .utils.s3 import generate_presigned_url
 from .models import Room
 from .serilalizers import RoomSerializer ,MealTemplateSerializer  
 from Client_panel.models import Enquiry
-
+from django.db import transaction
+from django.db.models import Sum, Q
+from rest_framework.parsers import MultiPartParser,FormParser
 class HostelListView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
@@ -28,46 +34,49 @@ class AddHostlerView(APIView):
 
     def post(self, request):
         room_id = request.data.get("room")
+        monthly_rent = request.data.get("monthly_rent")
+
+        if not monthly_rent:
+            return Response({"error": "Monthly rent is required."}, status=400)
+
         try:
             room = Room.objects.get(id=room_id)
-
         except Room.DoesNotExist:
-            return Response(
-                {"error": "Room not found"},
-                status=404
-            )
+            return Response({"error": "Room not found"}, status=404)
 
-        # Count current hostlers in room
-        current_hostlers = Hostler.objects.filter(
-            room=room
-        ).count()
-
-        # Check bed space
+        current_hostlers = Hostler.objects.filter(room=room).count()
         if current_hostlers >= room.bed_space:
-            return Response(
-                {"error": "This room is already full."},
-                status=400
-            )
+            return Response({"error": "This room is already full."}, status=400)
 
-        serializer = HostlerCreateSerializer(
-            data=request.data,
-            context={"request": request}
-        )
+        try:
+            with transaction.atomic():
+                serializer = HostlerCreateSerializer(
+                    data=request.data,
+                    context={"request": request}
+                )
 
-        if serializer.is_valid():
+                if serializer.is_valid():
+                    user = serializer.save()
+                    
+                    hostler = Hostler.objects.get(user=user)
+                    hostler.monthly_rent = monthly_rent
+                    hostler.save()
 
-            user = serializer.save()
+                    Transaction.objects.create(
+                        hostler=hostler,
+                        amount=monthly_rent,
+                        status='pending',
+                        billing_date=timezone.now().date()
+                    )
 
-            hostler = Hostler.objects.get(user=user)
+                    response_serializer = HostlerSerializer(hostler)
+                    return Response(response_serializer.data, status=201)
+                
+                return Response(serializer.errors, status=400)
 
-            response_serializer = HostlerSerializer(hostler)
-
-            return Response(
-                response_serializer.data,
-                status=201
-            )
-
-        return Response(serializer.errors, status=400)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+        
 
 class GenerateUploadURL(APIView):
     def post(self, request):
@@ -268,3 +277,74 @@ class DailyMealAssignmentView(APIView):
         assignments = AssignedMeal.objects.filter(hostel_id=hostel_id, date=date)
         serializer = AssignedMealSerializer(assignments, many=True)
         return Response(serializer.data, status=200)
+    
+class Enquery_change_view(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self,request,enquiry_id):
+        status_value=request.data.get("status")
+        allowed_status=['pending','responded','closed','accepted by owner']
+        if status_value not in allowed_status:
+            return Response({"error": "Invalid status value"}, status=400)  
+
+        try:
+            enquiry=Enquiry.objects.get(
+            id=enquiry_id,
+            hostel__owner=request.user)
+        except Enquiry.DoesNotExist:
+            return Response({"error":"Enquiry not found"},status=404)
+        
+        enquiry.status=status_value
+        enquiry.save()
+        return Response({"message": "Status updated successfully"}, status=200)
+
+class FinancialOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        owner = request.user
+        
+        transactions = Transaction.objects.filter(hostler__owner=owner)
+        
+        stats = transactions.aggregate(
+            total_pending=Sum('amount', filter=Q(status='pending')),
+            total_collected=Sum('amount', filter=Q(status='paid'))
+        )
+
+        pending_hostlers = Hostler.objects.filter(
+            owner=owner, 
+            transactions__status='pending'
+        ).annotate(total_due=Sum('transactions__amount')).distinct()
+
+        hostler_dues = [
+            {
+                "name": h.user.username,
+                "room": h.room.room_number if h.room else "N/A",
+                "amount_due": h.total_due,
+                "phone": h.phone
+            } for h in pending_hostlers
+        ]
+
+        return Response({
+            "summary": {
+                "pending": stats['total_pending'] or 0,
+                "collected": stats['total_collected'] or 0,
+                "total_expected": (stats['total_pending'] or 0) + (stats['total_collected'] or 0)
+            },
+            "payable_list": hostler_dues
+        })
+
+class SavePanoramaView(APIView):
+    # Required to handle file uploads
+    parser_classes = (MultiPartParser,FormParser)
+
+    def post(self, request):
+        # request.data will contain 'room' (ID) and 'image' (file)
+        serializer = RoomImageSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            # This saves the image and links it to the Room ID provided
+            serializer.save() 
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

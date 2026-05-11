@@ -118,7 +118,7 @@ class HostlerSerializer(serializers.ModelSerializer):
 class RoomImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room_image
-        fields = ['id', 'image']
+        fields = ['id', 'image','room']
 class RoomSerializer(serializers.ModelSerializer):
     hostlers = HostlerSerializer(many=True, read_only=True)
     images = RoomImageSerializer(many=True, read_only=True)
@@ -151,6 +151,7 @@ class EnquirySerializer(serializers.ModelSerializer):
             'hostel_name',
             'created_at',
             'updated_at',
+            'rejection_reason'
         ]
 
 class MealTemplateSerializer(serializers.ModelSerializer):

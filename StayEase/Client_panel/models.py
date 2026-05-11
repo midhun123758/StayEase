@@ -53,10 +53,11 @@ class Enquiry(models.Model):
     preferred_date = models.DateField(null=True, blank=True)
     stay_months = models.IntegerField(default=1)
     message = models.TextField(blank=True, null=True)
-
+    rejection_reason = models.TextField(blank=True, null=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='pending'
     )
+
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

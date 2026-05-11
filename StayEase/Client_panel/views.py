@@ -2,7 +2,7 @@ import math
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from Base_Panel.models import Hostel
-from .serializers import HostelSerializer
+from .serializers import EnquirySerializer, HostelSerializer
 from .models import Enquiry
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
@@ -10,8 +10,10 @@ from .models import HostelMessage
 from App.models import User
 from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import ChatRoom
-
+from rest_framework import status
+from django.shortcuts import get_object_or_404
 class SearchHostelView(APIView):
+
     permission_classes = [AllowAny]
     def post(self, request):
         user_lat = float(request.data.get("latitude"))
@@ -34,7 +36,6 @@ class SearchHostelView(APIView):
 
     def haversine(self, lat1, lon1, lat2, lon2):
         R = 6371  # Earth radius in KM
-
         lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
         dlat = lat2 - lat1
@@ -97,8 +98,6 @@ class UserDetailView(APIView):
         })
 
 
-
-
 class ChatHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -138,3 +137,15 @@ class ChatHistoryView(APIView):
 #         hostels=Hostel.objects.all()
 #         serializer=HostelSerializer(hostels,many=True)
 #         return Response(serializer.data)
+class ClientEnquiryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Returns a list of enquiries made by the currently logged-in user.
+        Includes the rejection_reason and status_display.
+        """
+        enquiries = Enquiry.objects.filter(user=request.user).order_by('-created_at')
+        serializer = EnquirySerializer(enquiries, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    

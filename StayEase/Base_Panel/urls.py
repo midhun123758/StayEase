@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import AddHostlerView, AddRoomView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView, FinancialOverviewView, GenerateUploadURL, HostelListView,AddDocument, Room_listView, SavePanoramaView,my_hostlers,OwnerChatListView,Meal_assignmentView
+from .views import AddHostlerView, AddRoomView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView, FinancialOverviewView, GenerateUploadURL, HostelListView,AddDocument, Room_listView, RoomImagesListView,my_hostlers,OwnerChatListView,Meal_assignmentView
 urlpatterns = [
     path('add_hostel/', HostelListView.as_view(), name='add_hostel'),
     path("generate-upload-url/", GenerateUploadURL.as_view()),
@@ -15,6 +15,6 @@ urlpatterns = [
     path("daily-assignments/", DailyMealAssignmentView.as_view(), name="daily_assignments"),
     path("enquery_edit/<int:enquiry_id>/",Enquery_change_view.as_view(),name="enquery_edit" ),
     path("financial-overview/", FinancialOverviewView.as_view(), name="financial_overview"),
-    path('rooms/upload-image/', SavePanoramaView.as_view(), name='room-image-upload'),
+    path("image_view/", RoomImagesListView.as_view(), name="image_view")
 
 ]

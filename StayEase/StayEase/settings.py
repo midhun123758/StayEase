@@ -160,3 +160,10 @@ USE_TZ        = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+import os
+
+# The URL prefix for media files (e.g., http://127.0.0.1:8000/media/image.jpg)
+MEDIA_URL = '/media/'
+
+# The absolute path to the directory where files will be stored
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

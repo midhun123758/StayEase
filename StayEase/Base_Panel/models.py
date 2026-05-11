@@ -49,7 +49,6 @@ class Room(models.Model):
     def __str__(self):
         return f"Room {self.room_number} - {self.room_type}"        
 
-
 class Room_image(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to="hostels/")
@@ -119,12 +118,7 @@ class AssignedMeal(models.Model):
     def total_dislikes(self):
         return self.dislikes.count()
     
-# class Payment_view(models.Model):
-#     user = models.ForeignKey(User, on_delete=models.CASCADE)
-#     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE)
-#     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
-    
 class Transaction(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),

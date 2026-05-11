@@ -114,46 +114,34 @@ class my_hostlers(APIView):
     
 class AddRoomView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
-
         hostel_id = request.data.get("hostel_id")
 
+        # 1. Ownership check
         try:
-            hostel = Hostel.objects.get(
-                id=hostel_id,
-                owner=request.user
-            )
-
+            hostel = Hostel.objects.get(id=hostel_id, owner=request.user)
         except Hostel.DoesNotExist:
-            return Response(
-                {"error": "Hostel not found or unauthorized"},
-                status=404
-            )
+            return Response({"error": "Hostel not found or unauthorized"}, status=404)
 
+        # 2. Validate and Save Room
         serializer = RoomSerializer(data=request.data)
-
         if serializer.is_valid():
-
-      
-            room = serializer.save(hostel=hostel)
-
-         
-            images = request.data.getlist("images")
-
-        
-            for image in images:
-                Room_image.objects.create(
-                    room=room,
-                    image=image
-                )
+            with transaction.atomic():
+                room = serializer.save(hostel=hostel)
+                images = request.FILES.getlist("images")
+                for img in images:
+                    Room_image.objects.create(
+                        room=room,
+                        image=img
+                    )
 
             return Response({
-                "message": "Room created successfully",
+                "message": "Room created successfully with images",
                 "room": serializer.data
-            }, status=201)
-
-        return Response(serializer.errors, status=400)
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class Room_listView(APIView):
     def get(self, request):
@@ -242,13 +230,9 @@ class DailyMealAssignmentView(APIView):
         meal_type = request.data.get("meal_type")
 
         try:
-            # 1. Verify hostel ownership
+           
             hostel = Hostel.objects.get(id=hostel_id, owner=request.user)
-            
-            # 2. Verify the meal item exists in this hostel's library
             meal_item = MealTemplate.objects.get(id=meal_item_id, hostel=hostel)
-            
-            # 3. Update if a meal is already assigned to that slot, else create
             assignment, created = AssignedMeal.objects.update_or_create(
                 hostel=hostel,
                 date=date,
@@ -281,22 +265,39 @@ class DailyMealAssignmentView(APIView):
 class Enquery_change_view(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self,request,enquiry_id):
-        status_value=request.data.get("status")
-        allowed_status=['pending','responded','closed','accepted by owner']
+    def patch(self, request, enquiry_id):
+        status_value = request.data.get("status")
+        reason = request.data.get("rejection_reason")
+        
+        allowed_status = ['pending', 'responded', 'closed', 'accepted by owner', 'rejected']
+        
         if status_value not in allowed_status:
-            return Response({"error": "Invalid status value"}, status=400)  
+            return Response({"error": f"Invalid status. Must be one of: {allowed_status}"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            enquiry=Enquiry.objects.get(
-            id=enquiry_id,
-            hostel__owner=request.user)
+            enquiry = Enquiry.objects.get(
+                id=enquiry_id,
+                hostel__owner=request.user
+            )
         except Enquiry.DoesNotExist:
-            return Response({"error":"Enquiry not found"},status=404)
-        
-        enquiry.status=status_value
+            return Response({"error": "Enquiry not found or unauthorized"}, status=status.HTTP_404_NOT_FOUND)
+
+        if status_value == 'rejected':
+            if not reason or len(reason.strip()) < 5:
+                return Response({"error": "A valid rejection reason (min 5 chars) is required."}, status=status.HTTP_400_BAD_REQUEST)
+            enquiry.rejection_reason = reason
+        else:
+            enquiry.rejection_reason = None
+
+        # 5. Save and Return
+        enquiry.status = status_value
         enquiry.save()
-        return Response({"message": "Status updated successfully"}, status=200)
+
+        return Response({
+            "message": f"Enquiry marked as {status_value}",
+            "status": enquiry.status,
+            "rejection_reason": enquiry.rejection_reason
+        }, status=status.HTTP_200_OK)
 
 class FinancialOverviewView(APIView):
     permission_classes = [IsAuthenticated]
@@ -334,17 +335,12 @@ class FinancialOverviewView(APIView):
             "payable_list": hostler_dues
         })
 
-class SavePanoramaView(APIView):
-    # Required to handle file uploads
-    parser_classes = (MultiPartParser,FormParser)
+class RoomImagesListView(APIView):
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        # request.data will contain 'room' (ID) and 'image' (file)
-        serializer = RoomImageSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            # This saves the image and links it to the Room ID provided
-            serializer.save() 
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        # Filters images belonging to rooms owned by the current user
+        images = Room_image.objects.filter(room__hostel__owner=request.user)
+        serializer = RoomImageSerializer(images, many=True)
+        return Response(serializer.data)
+    

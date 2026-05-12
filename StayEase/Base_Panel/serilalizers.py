@@ -179,3 +179,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         remaining = (obj.due_date - timezone.now().date()).days
         return max(0, remaining)
     
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role', 'is_google_user', 'kyc_completed']
+        read_only_fields = ['id', 'role', 'is_google_user', 'kyc_completed']

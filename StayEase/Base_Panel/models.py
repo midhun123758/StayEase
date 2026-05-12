@@ -51,7 +51,7 @@ class Room(models.Model):
 
 class Room_image(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="images")
-    image = models.ImageField(upload_to="hostels/")
+    image = models.ImageField(upload_to="Rooms/")
     def __str__(self):
         return f"Image of {self.room.room_number}"
     
@@ -99,16 +99,48 @@ class MealTemplate(models.Model):
 
 
 class AssignedMeal(models.Model):
-    hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE)
-    date = models.DateField()
-    meal_type = models.CharField(max_length=3, choices=MEAL_TYPES)
-    
-    # Link to the predicted meal library
-    meal_item = models.ForeignKey(MealTemplate, on_delete=models.SET_NULL, null=True)
-    
-    # Interaction Logic
-    likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked_meals', blank=True)
-    dislikes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='disliked_meals', blank=True)
+    hostel = models.ForeignKey(
+        Hostel,
+        on_delete=models.CASCADE,
+        related_name="assigned_meals"
+    )
+    date = models.DateField(default=timezone.now)
+    meal_type = models.CharField(
+        max_length=3,
+        choices=MEAL_TYPES
+    )
+    meal_item = models.ForeignKey(
+        MealTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_meals"
+    )
+    amount_per_hostler = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+    meal_image = models.ImageField(
+        upload_to="meal_images/",
+        blank=True,
+        null=True
+    )
+    description = models.TextField(blank=True, null=True)
+    likes = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="liked_meals",
+        blank=True
+    )
+    dislikes = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="disliked_meals",
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ("hostel", "date", "meal_type")
+        ordering = ["-date", "meal_type"]
 
     @property
     def total_likes(self):
@@ -117,7 +149,81 @@ class AssignedMeal(models.Model):
     @property
     def total_dislikes(self):
         return self.dislikes.count()
+
+    def __str__(self):
+        return f"{self.hostel.name} - {self.date} - {self.get_meal_type_display()}"
     
+class MessCharge(models.Model):
+    hostel = models.ForeignKey(
+        Hostel,
+        on_delete=models.CASCADE,
+        related_name="monthly_bills"
+    )
+
+    hostler = models.ForeignKey(
+        Hostler,
+        on_delete=models.CASCADE,
+        related_name="mess_charges"
+    )
+
+    assigned_meal = models.ForeignKey(
+        AssignedMeal,
+        on_delete=models.CASCADE,
+        related_name="charges"
+    )
+    date = models.DateField()
+    meal_type = models.CharField(
+        max_length=3,
+        choices=MEAL_TYPES
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+    is_paid = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("hostler", "assigned_meal")
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.hostler} - {self.get_meal_type_display()} - ₹{self.amount}"
+    
+
+class MonthlyMessBill(models.Model):
+    hostel = models.ForeignKey(
+        Hostel,
+        on_delete=models.CASCADE,
+        related_name="monthly_charges"
+    )
+    hostler = models.ForeignKey(
+        Hostler,
+        on_delete=models.CASCADE,
+        related_name="monthly_mess_bills"
+    )
+    month = models.IntegerField()
+    year = models.IntegerField()
+
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+    is_paid = models.BooleanField(default=False)
+    paid_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("hostler", "month", "year")
+        ordering = ["-year", "-month"]
+
+    def __str__(self):
+        return f"{self.hostler} - {self.month}/{self.year} - ₹{self.total_amount}"
+
+
 
 class Transaction(models.Model):
     STATUS_CHOICES = [
@@ -130,9 +236,45 @@ class Transaction(models.Model):
     billing_date = models.DateField(auto_now_add=True) 
     due_date = models.DateField(null=True, blank=True) 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    
     def save(self, *args, **kwargs):
         if not self.due_date:
             # Deadline is 30 days from the bill generation
             self.due_date = timezone.now().date() + timedelta(days=30)
         super().save(*args, **kwargs)
+
+
+class OwnerSubscription(models.Model):
+
+    PLAN_CHOICES = (
+        ("FREE", "Free"),
+        ("PRO", "Pro"),
+        ("PREMIUM", "Premium"),
+    )
+
+    owner = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="subscription"
+    )
+
+    plan = models.CharField(
+        max_length=20,
+        choices=PLAN_CHOICES,
+        default="FREE"
+    )
+
+    hostel_limit = models.IntegerField(default=1)
+
+    is_active = models.BooleanField(default=True)
+
+    start_date = models.DateTimeField(auto_now_add=True)
+
+    end_date = models.DateTimeField(
+        blank=True,
+        null=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.owner.username} - {self.plan}"

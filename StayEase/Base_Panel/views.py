@@ -266,11 +266,13 @@ class DailyMealAssignmentView(APIView):
                 },
                 status=400
             )
+
         try:
             hostel = Hostel.objects.get(
                 id=hostel_id,
                 owner=request.user
             )
+
             meal_item = MealTemplate.objects.get(
                 id=meal_item_id,
                 hostel=hostel,
@@ -288,22 +290,26 @@ class DailyMealAssignmentView(APIView):
                     "meal_image": meal_image,
                 }
             )
-            # CREATE MESS CHARGES
+
+            # CREATE / UPDATE MESS CHARGES
             hostlers = Hostler.objects.filter(
                 hostel=hostel,
                 is_active=True
             )
+
             for hostler in hostlers:
 
                 MessCharge.objects.update_or_create(
                     hostler=hostler,
                     assigned_meal=assignment,
                     defaults={
+                        "hostel": hostel,  # FIXED
                         "date": assignment.date,
                         "meal_type": assignment.meal_type,
                         "amount": assignment.amount_per_hostler,
                     }
                 )
+
             serializer = AssignedMealSerializer(assignment)
 
             return Response(
@@ -359,33 +365,6 @@ class DailyMealAssignmentView(APIView):
         )
 
         return Response(serializer.data, status=200)
-
-
-
-
-    def get(self, request):
-        hostel_id = request.query_params.get("hostel")
-        date = request.query_params.get("date")
-
-        if not hostel_id or not date:
-            return Response(
-                {"error": "hostel and date parameters are required"},
-                status=400
-            )
-
-        try:
-            hostel = Hostel.objects.get(id=hostel_id, owner=request.user)
-        except Hostel.DoesNotExist:
-            return Response({"error": "Hostel not found or unauthorized"}, status=404)
-
-        assignments = AssignedMeal.objects.filter(
-            hostel=hostel,
-            date=date
-        ).select_related("meal_item", "hostel")
-
-        serializer = AssignedMealSerializer(assignments, many=True)
-        return Response(serializer.data, status=200)
-        
 
 class Meal_assignmentView(APIView):
     permission_classes = [IsAuthenticated]

@@ -42,7 +42,10 @@ INSTALLED_APPS = [
     'Base_Panel',
     'Client_panel',
     "channels",
-    "phonenumber_field"
+    "phonenumber_field",
+    "cloudinary_storage",
+    'cloudinary',
+
 ]
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
@@ -133,6 +136,22 @@ AWS_S3_SIGNATURE_VERSION = "s3v4"
 
 
 
+import cloudinary
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True
+)
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+
+
+
+
+
+
 
 # settings.py
 PHONENUMBER_DEFAULT_REGION = "IN"
@@ -161,9 +180,3 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 import os
-
-# The URL prefix for media files (e.g., http://127.0.0.1:8000/media/image.jpg)
-MEDIA_URL = '/media/'
-
-# The absolute path to the directory where files will be stored
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

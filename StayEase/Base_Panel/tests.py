@@ -355,3 +355,4 @@ class BasePanelAPITest(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(HostelDocument.objects.count(), 1)
+

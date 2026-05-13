@@ -1,7 +1,7 @@
 
 from django.utils import timezone
 from rest_framework import serializers
-from .models import AssignedMeal, Hostel,Hostler, MealTemplate,Room, Room_image, Transaction
+from .models import AssignedMeal, Hostel,Hostler, MealTemplate,Room, Room_image, Subscription_Amount, Transaction
 from .models import User
 from Client_panel.models import Enquiry 
 class HostelSerializer(serializers.ModelSerializer):
@@ -184,3 +184,11 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'role', 'is_google_user', 'kyc_completed']
         read_only_fields = ['id', 'role', 'is_google_user', 'kyc_completed']
+
+
+
+class SubscriptionAmountSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Subscription_Amount
+        fields = "__all__"

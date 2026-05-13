@@ -12,6 +12,9 @@ from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import ChatRoom
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+
+from Client_panel.utils import send_client_notification
+
 class SearchHostelView(APIView):
 
     permission_classes = [AllowAny]

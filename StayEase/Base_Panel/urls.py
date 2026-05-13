@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import AddHostlerView, AddRoomView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView,Edit_hostel, FinancialOverviewView, GenerateUploadURL, HostelListView,AddDocument, Room_listView, RoomImagesListView,my_hostlers,OwnerChatListView,Meal_assignmentView,Owner_Profile
+from .views import AddHostlerView, AddRoomView, CreateSubscriptionOrderView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView,Edit_hostel, FinancialOverviewView, GenerateUploadURL, HostelListView,AddDocument, Room_listView, RoomImagesListView, SubscriptionDetailView, VerifySubscriptionPaymentView,my_hostlers,OwnerChatListView,Meal_assignmentView,Owner_Profile
 urlpatterns = [
     path('add_hostel/', HostelListView.as_view(), name='add_hostel'),
     path("generate-upload-url/", GenerateUploadURL.as_view()),
@@ -17,6 +17,8 @@ urlpatterns = [
     path("financial-overview/", FinancialOverviewView.as_view(), name="financial_overview"),
     path("image_view/", RoomImagesListView.as_view(), name="image_view"),
     path("edit_hostel/", Edit_hostel.as_view(), name="edit_hostel"),
-    path("owner_profile/", Owner_Profile.as_view(), name="owner_profile")
-
+    path("owner_profile/", Owner_Profile.as_view(), name="owner_profile"),
+    path("subscription/create-order/", CreateSubscriptionOrderView.as_view()),
+    path("subscription/verify-payment/", VerifySubscriptionPaymentView.as_view()),
+    path("subscription/detail/", SubscriptionDetailView.as_view()),
 ]

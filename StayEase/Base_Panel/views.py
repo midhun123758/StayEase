@@ -3,11 +3,11 @@ from django.utils import timezone
 from django.shortcuts import render
 from rest_framework import status
 from App.models import User
-from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, MessCharge, Room_image, Transaction
+from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response            
-from .serilalizers import AssignedMealSerializer, EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, UserSerializer
+from .serilalizers import AssignedMealSerializer, EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, SubscriptionAmountSerializer, UserSerializer
 from rest_framework.permissions import IsAuthenticated
 from .utils.s3 import generate_presigned_url
 from .models import Room
@@ -17,6 +17,11 @@ from django.db import transaction
 from django.db.models import Sum, Q
 from rest_framework.parsers import MultiPartParser,FormParser
 from .models import OwnerSubscription
+import razorpay
+from django.conf import settings
+from Client_panel.utils import send_client_notification
+
+
 class HostelListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -475,42 +480,102 @@ class Meal_assignmentView(APIView):
 
 
 
+
+
 class Enquery_change_view(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, enquiry_id):
         status_value = request.data.get("status")
-        reason = request.data.get("rejection_reason")
-        
-        allowed_status = ['pending', 'responded', 'closed', 'accepted by owner', 'rejected']
-        
+        reason = request.data.get("rejection_reason", "")
+
+        allowed_status = [
+            "pending",
+            "responded",
+            "closed",
+            "accepted by owner",
+            "rejected",
+        ]
+
+        if not status_value:
+            return Response(
+                {"error": "Status is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         if status_value not in allowed_status:
-            return Response({"error": f"Invalid status. Must be one of: {allowed_status}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"Invalid status. Must be one of: {allowed_status}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
-            enquiry = Enquiry.objects.get(
+            enquiry = Enquiry.objects.select_related(
+                "user",
+                "hostel",
+                "hostel__owner"
+            ).get(
                 id=enquiry_id,
                 hostel__owner=request.user
             )
         except Enquiry.DoesNotExist:
-            return Response({"error": "Enquiry not found or unauthorized"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Enquiry not found or unauthorized."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        if status_value == 'rejected':
+        if status_value == "rejected":
             if not reason or len(reason.strip()) < 5:
-                return Response({"error": "A valid rejection reason (min 5 chars) is required."}, status=status.HTTP_400_BAD_REQUEST)
-            enquiry.rejection_reason = reason
+                return Response(
+                    {
+                        "error": "A valid rejection reason with minimum 5 characters is required."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            enquiry.rejection_reason = reason.strip()
+
         else:
             enquiry.rejection_reason = None
 
-        # 5. Save and Return
         enquiry.status = status_value
         enquiry.save()
 
-        return Response({
-            "message": f"Enquiry marked as {status_value}",
-            "status": enquiry.status,
-            "rejection_reason": enquiry.rejection_reason
-        }, status=status.HTTP_200_OK)
+        # Live notification message
+        notification_message = f"Your enquiry for {enquiry.hostel.name} was updated to {status_value}."
+
+        if status_value == "accepted by owner":
+            notification_message = f"Good news! Your enquiry for {enquiry.hostel.name} was accepted by the owner."
+
+        elif status_value == "rejected":
+            notification_message = f"Your enquiry for {enquiry.hostel.name} was rejected. Reason: {enquiry.rejection_reason}"
+
+        elif status_value == "closed":
+            notification_message = f"Your enquiry for {enquiry.hostel.name} was closed."
+
+        send_client_notification(
+            user_id=enquiry.user.id,
+            message=notification_message,
+            notification_type="enquiry_status_changed",
+            data={
+                "enquiry_id": enquiry.id,
+                "hostel_id": enquiry.hostel.id,
+                "hostel_name": enquiry.hostel.name,
+                "status": enquiry.status,
+                "rejection_reason": enquiry.rejection_reason,
+            }
+        )
+
+        return Response(
+            {
+                "message": f"Enquiry marked as {status_value}",
+                "enquiry_id": enquiry.id,
+                "status": enquiry.status,
+                "rejection_reason": enquiry.rejection_reason,
+            },
+            status=status.HTTP_200_OK
+        )
+
 
 class FinancialOverviewView(APIView):
     permission_classes = [IsAuthenticated]
@@ -652,3 +717,149 @@ class Owner_Profile(APIView):
         serializer = UserSerializer(owner)
 
         return Response(serializer.data, status=200)
+    
+
+class SubscriptionAmountView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+
+        serializer = SubscriptionAmountSerializer(
+            data=request.data
+        )
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                {
+                    "message": "Subscription amount created",
+                    "data": serializer.data
+                },
+                status=201
+            )
+        return Response(serializer.errors, status=400)
+    def get(self, request):
+        amounts = Subscription_Amount.objects.all().order_by("-created_at")
+        serializer = SubscriptionAmountSerializer(
+            amounts,
+            many=True
+        )
+        return Response(serializer.data, status=200)
+    
+
+
+class CreateSubscriptionOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        plan = request.data.get("plan")
+        try:
+            subscription_amount = Subscription_Amount.objects.get(
+                plan=plan
+            )
+        except Subscription_Amount.DoesNotExist:
+            return Response(
+                {"error": "Subscription plan not found"},
+                status=404
+            )
+
+        amount_in_paise = int(subscription_amount.amount * 100)
+
+        client = razorpay.Client(
+            auth=(
+                settings.RAZORPAY_KEY_ID,
+                settings.RAZORPAY_KEY_SECRET
+            )
+        )
+
+        order = client.order.create({
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "payment_capture": 1,
+            "notes": {
+                "owner_id": request.user.id,
+                "plan": plan,
+            }
+        })
+
+        return Response({
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "key": settings.RAZORPAY_KEY_ID,
+            "plan": plan,
+        }, status=201)
+
+
+class VerifySubscriptionPaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        razorpay_order_id = request.data.get("razorpay_order_id")
+        razorpay_payment_id = request.data.get("razorpay_payment_id")
+        razorpay_signature = request.data.get("razorpay_signature")
+        plan = request.data.get("plan")
+
+        client = razorpay.Client(
+            auth=(
+                settings.RAZORPAY_KEY_ID,
+                settings.RAZORPAY_KEY_SECRET
+            )
+        )
+
+        try:
+
+            client.utility.verify_payment_signature({
+                "razorpay_order_id": razorpay_order_id,
+                "razorpay_payment_id": razorpay_payment_id,
+                "razorpay_signature": razorpay_signature,
+            })
+
+        except Exception:
+
+            return Response(
+                {"error": "Payment verification failed"},
+                status=400
+            )
+
+        subscription, created = OwnerSubscription.objects.get_or_create(
+            owner=request.user
+        )
+
+        subscription.plan = plan
+
+        if plan == "FREE":
+            subscription.hostel_limit = 1
+
+        elif plan == "PRO":
+            subscription.hostel_limit = 5
+
+        elif plan == "PREMIUM":
+            subscription.hostel_limit = 20
+
+        subscription.is_active = True
+        subscription.save()
+
+        return Response({
+            "message": "Payment verified successfully",
+            "plan": subscription.plan,
+            "hostel_limit": subscription.hostel_limit,
+            "is_active": subscription.is_active,
+        }, status=200)
+    
+
+class SubscriptionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        subscription, created = OwnerSubscription.objects.get_or_create(
+            owner=request.user,
+            defaults={
+                "plan": "FREE",
+                "hostel_limit": 1,
+            }
+        )
+        return Response({
+            "plan": subscription.plan,
+            "hostel_limit": subscription.hostel_limit,
+            "is_active": subscription.is_active,
+        }, status=200)

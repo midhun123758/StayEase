@@ -40,7 +40,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'owner_panel',
     'rest_framework',
 ]
 
@@ -54,7 +53,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'owner_service.urls'
+ROOT_URLCONF = 'Ai_service.urls'
 
 TEMPLATES = [
     {
@@ -71,7 +70,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'owner_service.wsgi.application'
+WSGI_APPLICATION = 'Ai_service.wsgi.application'
 
 
 # Database

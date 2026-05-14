@@ -35,41 +35,41 @@ services:
     networks:
       - stayease_network
 
-  owner_service:
-    build: ./owner_service
-    container_name: owner_service
+  ai_service:
+    build: ./Ai_service
+    container_name: ai_service
     command: python manage.py runserver 0.0.0.0:8001
     volumes:
-      - ./owner_service:/app
+      - ./Ai_service:/app
     ports:
-      - "8001:8001"
+      - "8002:8001"
     env_file:
-      - ./owner_service/.env
+      - ./Ai_service/.env
     depends_on:
-      - owner_db
-      - owner_redis
+      - ai_db
+      - ai_redis
     networks:
       - stayease_network
 
-  owner_db:
+  ai_db:
     image: postgres:15
-    container_name: owner_db
+    container_name: ai_db
     environment:
-      POSTGRES_DB: ${OWNER_DB_NAME}
-      POSTGRES_USER: ${OWNER_DB_USER}
-      POSTGRES_PASSWORD: ${OWNER_DB_PASSWORD}
+      POSTGRES_DB: ${AI_DB_NAME}
+      POSTGRES_USER: ${AI_DB_USER}
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
-      - owner_postgres_data:/var/lib/postgresql/data/
+      - ai_postgres_data:/var/lib/postgresql/data/
     networks:
       - stayease_network
 
-  owner_redis:
+  ai_redis:
     image: redis:7
-    container_name: owner_redis
+    container_name: ai_redis
     ports:
-      - "6380:6379"
+      - "6381:6379"
     networks:
       - stayease_network
 
@@ -82,14 +82,16 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - stayease_web
-      - owner_service
+      - ai_service
     networks:
       - stayease_network
 
 volumes:
   stayease_postgres_data:
-  owner_postgres_data:
-
+    name: stayease_postgres_data
+  ai_postgres_data:
+    name: ai_postgres_data
+    
 networks:
   stayease_network:
     driver: bridge

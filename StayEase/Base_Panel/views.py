@@ -127,25 +127,33 @@ class AddHostlerView(APIView):
 class GenerateUploadURL(APIView):
     def post(self, request):
         file_type = request.data.get("file_type")
-
         upload_url, file_url = generate_presigned_url(file_type)
-
         return Response({
             "upload_url": upload_url,
             "file_url": file_url
         })
     
 class AddDocument(APIView):
-    def post(self, request):
-        HostelDocument.objects.create(
-            hostel_id=request.data.get("hostel"),
-            uploaded_by=request.user,
-            file_url=request.data.get("file_url"),
-            document_type=request.data.get("document_type")
-        )
-        return Response({"message": "Saved"})
-    
+    permission_classes = [IsAuthenticated]
 
+    def post(self, request):
+        try:
+            hostel = Hostel.objects.get(owner=request.user)
+            document = HostelDocument.objects.create(
+                hostel=hostel,
+                uploaded_by=request.user,
+                file_url=request.data.get("file_url"),
+                document_type=request.data.get("document_type")
+            )
+            return Response({
+                "message": "Saved Successfully",
+                "document_id": document.id
+            }, status=status.HTTP_201_CREATED)
+
+        except Hostel.DoesNotExist:
+            return Response({
+                "error": "Hostel not found for this owner"
+            }, status=status.HTTP_404_NOT_FOUND)
 
 
 class my_hostlers(APIView):

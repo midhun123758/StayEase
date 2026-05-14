@@ -340,6 +340,7 @@ class BasePanelAPITest(APITestCase):
         self.assertIn("summary", response.data)
         self.assertEqual(response.data["summary"]["pending"], 5000)
 
+    
     def test_add_document(self):
         data = {
             "hostel": self.hostel.id,
@@ -353,6 +354,13 @@ class BasePanelAPITest(APITestCase):
             format="json"
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(HostelDocument.objects.count(), 1)
+        self.assertEqual(
+            response.status_code,
+            201,
+            msg=response.data
+        )
 
+        self.assertEqual(
+            HostelDocument.objects.count(),
+            1
+        )

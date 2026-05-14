@@ -23,6 +23,7 @@ urlpatterns = [
     path('auth/', include('App.urls')),
     path('hostel/', include('Base_Panel.urls')),
     path ('client/', include('Client_panel.urls')),
+    path('hostler/', include('Hostlers_panel.urls')),
   
 ]
 if settings.DEBUG:

@@ -5,6 +5,8 @@ from django.db import models
 # Create your models here.
 from App.models import User
 from django.conf import settings
+from dateutil.relativedelta import relativedelta
+
 class Hostel(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hostels')
     name = models.CharField(max_length=255)
@@ -54,9 +56,9 @@ class Room_image(models.Model):
     image = models.ImageField(upload_to="Rooms/")
     def __str__(self):
         return f"Image of {self.room.room_number}"
-    
 
-class ChatRoom(models.Model):
+
+class ChatRoom(models.Model):    
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="chatrooms")
     client = models.ForeignKey(User, on_delete=models.CASCADE, related_name="client_rooms")
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="owner_rooms")
@@ -226,22 +228,105 @@ class MonthlyMessBill(models.Model):
 
 
 class Transaction(models.Model):
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('paid', 'Paid'),
         ('overdue', 'Overdue'),
+        ('failed', 'Failed'),
     ]
-    hostler = models.ForeignKey(Hostler, on_delete=models.CASCADE, related_name='transactions')
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    billing_date = models.DateField(auto_now_add=True) 
-    due_date = models.DateField(null=True, blank=True) 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    PAYMENT_TYPE = [
+        ('rent', 'Monthly Rent'),
+        ('mess', 'Mess Fee'),
+        ('electricity', 'Electricity'),
+        ('full', 'Full Payment'),
+    ]
+    hostler = models.ForeignKey(
+        Hostler,
+        on_delete=models.CASCADE,
+        related_name='transactions'
+    )
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='owner_transactions'
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+    payment_type = models.CharField(
+        max_length=50,
+        choices=PAYMENT_TYPE,
+        default='rent'
+    )
+    billing_date = models.DateField(
+        auto_now_add=True
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True
+    )
+    payment_date = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    # RAZORPAY
+    razorpay_order_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+    razorpay_payment_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+    razorpay_signature = models.TextField(
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
     def save(self, *args, **kwargs):
+
+        # AUTO OWNER
+        if not self.owner:
+            self.owner = self.hostler.owner
+
+        # AUTO DUE DATE
         if not self.due_date:
-            # Deadline is 30 days from the bill generation
-            self.due_date = timezone.now().date() + timedelta(days=30)
+            self.due_date = (
+                timezone.now().date()
+                + relativedelta(months=1)
+            )
+
+        # AUTO OVERDUE
+        if (
+            self.status == "pending"
+            and self.due_date < timezone.now().date()
+        ):
+            self.status = "overdue"
+
         super().save(*args, **kwargs)
 
+    def __str__(self):
+
+        return (
+            f"{self.hostler.user.username} - "
+            f"{self.amount} - "
+            f"{self.status}"
+        )
+    
 
 class OwnerSubscription(models.Model):
 
@@ -250,36 +335,27 @@ class OwnerSubscription(models.Model):
         ("PRO", "Pro"),
         ("PREMIUM", "Premium"),
     )
-
     owner = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
         related_name="subscription"
     )
-
     plan = models.CharField(
         max_length=20,
         choices=PLAN_CHOICES,
         default="FREE"
     )
-
     hostel_limit = models.IntegerField(default=1)
-
     is_active = models.BooleanField(default=True)
-
     start_date = models.DateTimeField(auto_now_add=True)
-
     end_date = models.DateTimeField(
         blank=True,
         null=True
     )
-
     created_at = models.DateTimeField(auto_now_add=True)
-
     def __str__(self):
         return f"{self.owner.username} - {self.plan}"
     
-
 class Subscription_Amount(models.Model):
 
     PLAN_CHOICES = (

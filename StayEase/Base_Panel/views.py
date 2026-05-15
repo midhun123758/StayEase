@@ -110,6 +110,7 @@ class AddHostlerView(APIView):
 
                     Transaction.objects.create(
                         hostler=hostler,
+                        owner=request.user,
                         amount=monthly_rent,
                         status='pending',
                         billing_date=timezone.now().date()
@@ -871,3 +872,5 @@ class SubscriptionDetailView(APIView):
             "hostel_limit": subscription.hostel_limit,
             "is_active": subscription.is_active,
         }, status=200)
+    
+

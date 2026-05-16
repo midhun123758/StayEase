@@ -24,6 +24,14 @@ class User(AbstractUser):
         blank=True,
         related_name='clients'
     )
+    
+    upi_id = models.CharField(
+    max_length=100,
+    null=True,
+    blank=True
+     )  
+
+
 
     is_google_user = models.BooleanField(default=False)
     kyc_completed = models.BooleanField(default=False)
@@ -54,6 +62,8 @@ class KycDocument(models.Model):
     latitude = models.FloatField()
     longitude = models.FloatField()
     status = models.CharField(max_length=10, default='pending')
+    upi_id = models.CharField(max_length=100,null=True,blank=True)
+    account_holder_name = models.CharField(max_length=100,null=True,blank=True)
 
 
 

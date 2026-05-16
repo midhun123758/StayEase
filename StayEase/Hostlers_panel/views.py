@@ -3,9 +3,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import Hostler
-from .serializers import HostelViewSerializer,HostlerViewSerializer,Room_Serializer,HostlerRoomSerializer
+from App.models import KycDocument
+from .serializers import HostelViewSerializer,HostlerViewSerializer, PaymentSerializer,Room_Serializer,HostlerRoomSerializer
 from Base_Panel.models import Transaction
-from .serializers import payment_serilizer
 from django.conf import settings
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
@@ -20,8 +20,6 @@ class Hostler_view(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK )
         except Hostler.DoesNotExist:
             return Response({"error":"You are not assignd as a Hostler"},status=status.HTTP_404_NOT_FOUND)
-
-
 
 
 class ViewMyHostel(APIView):
@@ -44,17 +42,35 @@ class ViewMyHostel(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-class payments_view(APIView):
-    def get(self,request):
-        user=request.user
-        hostler=Hostler.objects.get(user=user)
+class PaymentsView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
         try:
-            payments=Transaction.objects.filter(hostler=hostler).order_by("-created_at")
-            serializer=payment_serilizer(payments,many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK )
+            hostler = Hostler.objects.get(user=request.user)
+
+            payments = Transaction.objects.filter(
+                hostler=hostler
+            ).order_by("-created_at")
+
+            serializer = PaymentSerializer(
+                payments,
+                many=True
+            )
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
         except Hostler.DoesNotExist:
-            return Response({"error":"You are not assignd as a Hostler"})
-            
+
+            return Response(
+                {"error": "You are not assigned as a Hostler"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 client = razorpay.Client(
     auth=(
@@ -62,95 +78,134 @@ client = razorpay.Client(
         settings.RAZORPAY_KEY_SECRET
     )
 )
-
 class CreatePayment(APIView):
+
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        hostler = Hostler.objects.get(
-            user=request.user
-        )
-        amount = int(
-            hostler.monthly_rent * 100
-        )
 
-        order = client.order.create({
-            "amount": amount,
-            "currency": "INR",
-            "payment_capture": 1
-        })
+        try:
 
-        transaction = Transaction.objects.create(
-            hostler=hostler,
-            owner=hostler.owner,
-            amount=hostler.monthly_rent,
-            razorpay_order_id=order["id"]
-        )
+            transaction = Transaction.objects.get(
+                id=request.data["transaction_id"],
+                hostler__user=request.user,
+                status="pending"
+            )
 
-        return Response({
-            "success": True,
-            "order_id": order["id"],
-            "amount": amount,
-            "key": settings.RAZORPAY_KEY_ID
-        })
-    
+            amount = int(
+                float(transaction.amount) * 100
+            )
 
+            order = client.order.create({
+                "amount": amount,
+                "currency": "INR",
+                "payment_capture": 1
+            })
+
+            transaction.razorpay_order_id = (
+                order["id"]
+            )
+
+            transaction.save()
+
+            return Response({
+                "success": True,
+                "order_id": order["id"],
+                "amount": amount,
+                "transaction_id": transaction.id,
+                "key": settings.RAZORPAY_KEY_ID
+            }, status=201)
+
+        except Transaction.DoesNotExist:
+
+            return Response({
+                "success": False,
+                "message": "Pending transaction not found"
+            }, status=404)
+
+        except Exception as e:
+
+            return Response({
+                "success": False,
+                "message": str(e)
+            }, status=500)
 class VerifyPayment(APIView):
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
 
-        data = request.data
+        try:
 
-        transaction = Transaction.objects.get(
-            razorpay_order_id=
-            data["razorpay_order_id"]
-        )
+            data = request.data
 
-        params_dict = {
+            transaction = Transaction.objects.get(
+                razorpay_order_id=
+                data["razorpay_order_id"],
+                hostler__user=request.user
+            )
 
-            "razorpay_order_id":
-            data["razorpay_order_id"],
+            if transaction.status == "paid":
 
-            "razorpay_payment_id":
-            data["razorpay_payment_id"],
+                return Response({
+                    "success": False,
+                    "message":
+                    "Payment already verified"
+                }, status=400)
 
-            "razorpay_signature":
-            data["razorpay_signature"],
-        }
+            client.utility.verify_payment_signature({
+                "razorpay_order_id":
+                data["razorpay_order_id"],
 
-        client.utility.verify_payment_signature(
-            params_dict
-        )
+                "razorpay_payment_id":
+                data["razorpay_payment_id"],
 
-        transaction.status = "paid"
+                "razorpay_signature":
+                data["razorpay_signature"],
+            })
 
-        transaction.payment_date = (
-            timezone.now()
-        )
+            transaction.status = "paid"
 
-        transaction.razorpay_payment_id = (
-            data["razorpay_payment_id"]
-        )
+            transaction.payment_date = (
+                timezone.now()
+            )
 
-        transaction.razorpay_signature = (
-            data["razorpay_signature"]
-        )
+            transaction.razorpay_payment_id = (
+                data["razorpay_payment_id"]
+            )
 
-        transaction.due_date = (
-            timezone.now().date()
-            + relativedelta(months=1)
-        )
+            transaction.razorpay_signature = (
+                data["razorpay_signature"]
+            )
 
-        transaction.save()
+            transaction.due_date = (
+                timezone.now().date()
+                + relativedelta(months=1)
+            )
 
-        return Response({
-            "success": True,
-            "message":
-            "Payment Successful"
-        })
-    
+            transaction.save()
 
+            return Response({
+                "success": True,
+                "message":
+                "Payment Successful"
+            })
+
+        except Transaction.DoesNotExist:
+
+            return Response({
+                "success": False,
+                "message":
+                "Transaction not found"
+            }, status=404)
+
+        except Exception as e:
+
+            return Response({
+                "success": False,
+                "message": str(e)
+            }, status=400)
+        
 class my_room(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
@@ -169,3 +224,73 @@ class my_room(APIView):
            
 
 
+class GPayPaymentView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, transaction_id):
+
+        try:
+
+            transaction = Transaction.objects.get(
+                id=transaction_id,
+                hostler__user=request.user
+            )
+
+            owner = transaction.owner
+
+            kyc = KycDocument.objects.get(
+                user=owner
+            )
+
+            return Response({
+
+                "success": True,
+
+                "upi_id": kyc.upi_id,
+
+                "account_holder_name":
+                kyc.account_holder_name,
+
+                "amount":
+                transaction.amount,
+
+                "transaction_id":
+                transaction.id,
+
+                "owner_name":
+                owner.username
+
+            }, status=status.HTTP_200_OK)
+
+        except Transaction.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                "Transaction not found"
+
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        except KycDocument.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                "Owner KYC not found"
+
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+
+            return Response({
+
+                "success": False,
+
+                "message": str(e)
+
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

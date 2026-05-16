@@ -40,3 +40,5 @@ volumes:
 networks:
   stayease_network:
     external: true
+
+

@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "cloudinary_storage",
     'cloudinary',
     'Hostlers_panel',
+    'django_celery_beat',
 
 ]
 
@@ -146,6 +147,33 @@ cloudinary.config(
     secure=True
 )
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+CELERY_BROKER_URL = 'redis://stayease_redis:6379/0'
+
+CELERY_ACCEPT_CONTENT = ['json']
+
+CELERY_TASK_SERIALIZER = 'json'
+
+CELERY_RESULT_SERIALIZER = 'json'
+
+CELERY_TIMEZONE = 'Asia/Kolkata'
+
+
+
+
+
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'generate-monthly-bills-everyday': {
+        'task': 'Hostlers_panel.tasks.generate_monthly_bills',
+        'schedule': crontab(hour=0, minute=1),
+    },
+}
+
+
+
 
 
 

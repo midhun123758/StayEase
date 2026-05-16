@@ -12,8 +12,13 @@ from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import ChatRoom
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-
 from Client_panel.utils import send_client_notification
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
+
+
 
 class SearchHostelView(APIView):
 
@@ -62,14 +67,20 @@ class HostelDetailView(APIView):
             return Response({"error":str(e)},status=500)        
         
 
+
 class CreateEnquiryView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, hostel_id):
+
         try:
             hostel = Hostel.objects.get(id=hostel_id)
+
         except Hostel.DoesNotExist:
-            return Response({"error": "Hostel not found"}, status=404)
+            return Response(
+                {"error": "Hostel not found"},
+                status=404
+            )
 
         enquiry = Enquiry.objects.create(
             user=request.user,
@@ -82,10 +93,32 @@ class CreateEnquiryView(APIView):
             message=request.data.get("message"),
         )
 
-        return Response({"message": "Enquiry sent successfully"}, status=201)
-    
+        # websocket notification
+        channel_layer = get_channel_layer()
 
+        async_to_sync(channel_layer.group_send)(
+            f"notify_{hostel.owner.id}",
+            {
+                "type": "send_notification",
 
+                "notification_type": "new_enquiry",
+
+                "message": f"{request.user.username} sent a new enquiry",
+
+                "data": {
+                    "enquiry_id": enquiry.id,
+                    "hostel_id": hostel.id,
+                    "hostel_name": hostel.name,
+                    "user_id": request.user.id,
+                    "username": request.user.username,
+                }
+            }
+        )
+
+        return Response(
+            {"message": "Enquiry sent successfully"},
+            status=201
+        )
 
 class UserDetailView(APIView):
     """

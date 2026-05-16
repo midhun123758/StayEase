@@ -38,68 +38,69 @@ class HostelViewSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class payment_serilizer(serializers.ModelSerializer):
 
-    next_payment_date =serializers.SerializerMethodField()
 
-    days_left =serializers.SerializerMethodField()
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+
+    next_payment_date = serializers.SerializerMethodField()
+
+    days_left = serializers.SerializerMethodField()
+
+    amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        coerce_to_string=False
+    )
 
     class Meta:
         model = Transaction
-        fields = '__all__'
+        fields = "__all__"
         depth = 1
 
     # NEXT PAYMENT DATE
 
-    def get_next_payment_date(
-        self,
-        obj
-    ):
-        if obj.hostler.joining_date:
+    def get_next_payment_date(self, obj):
+
+        if obj.hostler and obj.hostler.joining_date:
+
             today = date.today()
-            joining_date = (
-                obj.hostler.joining_date
-            )
+
+            joining_date = obj.hostler.joining_date
+
             months_stayed = (
                 (today.year - joining_date.year) * 12
-                + today.month
-                - joining_date.month
+                + (today.month - joining_date.month)
             )
-            next_payment = (
-                joining_date
-                + relativedelta(
-                    months=months_stayed + 1
-                )
+
+            next_payment = joining_date + relativedelta(
+                months=months_stayed + 1
             )
+
             return next_payment
+
         return None
 
     # DAYS LEFT
-    def get_days_left(
-        self,
-        obj
-    ):
-        if obj.hostler.joining_date:
+
+    def get_days_left(self, obj):
+
+        if obj.hostler and obj.hostler.joining_date:
+
             today = date.today()
-            joining_date = (
-                obj.hostler.joining_date
-            )
+
+            joining_date = obj.hostler.joining_date
+
             months_stayed = (
                 (today.year - joining_date.year) * 12
-                + today.month
-                - joining_date.month
+                + (today.month - joining_date.month)
             )
-            next_payment = (
-                joining_date
-                + relativedelta(
-                    months=months_stayed + 1
-                )
+            next_payment = joining_date + relativedelta(
+                months=months_stayed + 1
             )
-            return (
-                next_payment - today
-            ).days
+            return (next_payment - today).days
         return 0
-    
 
 class RoommateSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username")

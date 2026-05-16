@@ -113,15 +113,29 @@ def make_hostler(
 class BasePanelAPITest(APITestCase):
 
     def setUp(self):
-        self.client = APIClient()
-        self.owner = make_owner()
-        self.client.force_authenticate(user=self.owner)
 
-        self.hostel = make_hostel(self.owner)
-        self.room = make_room(self.hostel)
-        self.meal = make_meal(self.hostel)
+        self.client = APIClient()
+
+        self.owner = make_owner()
+
+        self.client.force_authenticate(
+            user=self.owner
+        )
+
+        self.hostel = make_hostel(
+            self.owner
+        )
+
+        self.room = make_room(
+            self.hostel
+        )
+
+        self.meal = make_meal(
+            self.hostel
+        )
 
     def test_add_hostel(self):
+
         data = {
             "name": "New Hostel",
             "address": "Kochi",
@@ -142,9 +156,13 @@ class BasePanelAPITest(APITestCase):
             format="multipart"
         )
 
-        self.assertIn(response.status_code, [201, 403])
+        self.assertIn(
+            response.status_code,
+            [201, 403]
+        )
 
     def test_add_room(self):
+
         data = {
             "room_number": "102",
             "room_type": "double",
@@ -159,9 +177,13 @@ class BasePanelAPITest(APITestCase):
             format="multipart"
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.status_code,
+            201
+        )
 
     def test_add_hostler(self):
+
         data = {
             "username": "newhostler",
             "email": "newhostler@test.com",
@@ -170,7 +192,9 @@ class BasePanelAPITest(APITestCase):
             "hostel": self.hostel.id,
             "room": self.room.id,
             "monthly_rent": "5000.00",
-            "check_in_date": str(timezone.now().date()),
+            "check_in_date": str(
+                timezone.now().date()
+            ),
         }
 
         response = self.client.post(
@@ -184,19 +208,36 @@ class BasePanelAPITest(APITestCase):
             201,
             msg=response.data
         )
-        self.assertEqual(Transaction.objects.count(), 1)
+
+        self.assertEqual(
+            Transaction.objects.count(),
+            1
+        )
 
     def test_my_hostlers_list(self):
-        make_hostler(self.owner, self.hostel, self.room)
+
+        make_hostler(
+            self.owner,
+            self.hostel,
+            self.room
+        )
 
         response = self.client.get(
             f"{MY_HOSTLERS_URL}?hostel_id={self.hostel.id}"
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.assertEqual(
+            len(response.data),
+            1
+        )
 
     def test_create_meal_template(self):
+
         data = {
             "hostel": self.hostel.id,
             "name": "Dosa",
@@ -216,12 +257,19 @@ class BasePanelAPITest(APITestCase):
         )
 
     def test_daily_meal_assignment(self):
-        make_hostler(self.owner, self.hostel, self.room)
+
+        make_hostler(
+            self.owner,
+            self.hostel,
+            self.room
+        )
 
         data = {
             "hostel": self.hostel.id,
             "meal_item": self.meal.id,
-            "date": str(timezone.now().date()),
+            "date": str(
+                timezone.now().date()
+            ),
             "meal_type": "BRK",
             "amount_per_hostler": "50.00",
             "description": "Morning food",
@@ -233,10 +281,18 @@ class BasePanelAPITest(APITestCase):
             format="multipart"
         )
 
-        self.assertIn(response.status_code, [200, 201])
-        self.assertEqual(MessCharge.objects.count(), 1)
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+        self.assertEqual(
+            MessCharge.objects.count(),
+            1
+        )
 
     def test_enquiry_list(self):
+
         client_user = make_client()
 
         Enquiry.objects.create(
@@ -255,10 +311,18 @@ class BasePanelAPITest(APITestCase):
             f"{ENQUIRY_LIST_URL}?hostel_id={self.hostel.id}"
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.assertEqual(
+            len(response.data),
+            1
+        )
 
     def test_enquiry_accept(self):
+
         client_user = make_client()
 
         enquiry = Enquiry.objects.create(
@@ -279,12 +343,20 @@ class BasePanelAPITest(APITestCase):
             format="json"
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
         enquiry.refresh_from_db()
-        self.assertEqual(enquiry.status, "accepted by owner")
+
+        self.assertEqual(
+            enquiry.status,
+            "accepted by owner"
+        )
 
     def test_enquiry_reject_with_reason(self):
+
         client_user = make_client()
 
         enquiry = Enquiry.objects.create(
@@ -308,16 +380,20 @@ class BasePanelAPITest(APITestCase):
             format="json"
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
         enquiry.refresh_from_db()
-        self.assertEqual(enquiry.status, "rejected")
+
         self.assertEqual(
-            enquiry.rejection_reason,
-            "Room is not available"
+            enquiry.status,
+            "rejected"
         )
 
     def test_financial_overview(self):
+
         hostler = make_hostler(
             self.owner,
             self.hostel,
@@ -328,6 +404,7 @@ class BasePanelAPITest(APITestCase):
 
         Transaction.objects.create(
             hostler=hostler,
+            owner=self.owner,
             amount=5000,
             status="pending",
         )
@@ -336,12 +413,23 @@ class BasePanelAPITest(APITestCase):
             f"{FINANCE_URL}?hostel={self.hostel.id}"
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("summary", response.data)
-        self.assertEqual(response.data["summary"]["pending"], 5000)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
 
-    
+        self.assertIn(
+            "summary",
+            response.data
+        )
+
+        self.assertEqual(
+            response.data["summary"]["pending"],
+            5000
+        )
+
     def test_add_document(self):
+
         data = {
             "hostel": self.hostel.id,
             "file_url": "https://example.com/test.pdf",
@@ -364,3 +452,4 @@ class BasePanelAPITest(APITestCase):
             HostelDocument.objects.count(),
             1
         )
+

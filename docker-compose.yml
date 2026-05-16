@@ -1,4 +1,5 @@
 services:
+
   stayease_web:
     build: ./StayEase
     container_name: stayease_web
@@ -86,12 +87,43 @@ services:
     networks:
       - stayease_network
 
+  celery:
+    build: ./StayEase
+    container_name: stayease_celery
+    command: celery -A StayEase worker -l info
+    volumes:
+      - ./StayEase:/app
+    env_file:
+      - ./StayEase/.env
+    depends_on:
+      - stayease_db
+      - stayease_redis
+    networks:
+      - stayease_network
+
+  celery_beat:
+    build: ./StayEase
+    container_name: stayease_celery_beat
+    command: celery -A StayEase beat -l info
+    volumes:
+      - ./StayEase:/app
+    env_file:
+      - ./StayEase/.env
+    depends_on:
+      - stayease_db
+      - stayease_redis
+    networks:
+      - stayease_network
+
+
 volumes:
   stayease_postgres_data:
     name: stayease_postgres_data
+
   ai_postgres_data:
     name: ai_postgres_data
-    
+
+
 networks:
   stayease_network:
     driver: bridge

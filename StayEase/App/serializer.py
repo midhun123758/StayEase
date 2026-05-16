@@ -5,7 +5,7 @@ from .models import KycDocument, User
 class Profile(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password','role']
+        fields = ['id', 'username', 'email', 'password','role','upi_id']
         extra_kwargs = {
             'password': {'write_only': True}
         }

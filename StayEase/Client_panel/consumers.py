@@ -135,3 +135,4 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             "message": event["message"],
             "data": event.get("data", {})
         }))
+

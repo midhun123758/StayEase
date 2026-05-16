@@ -487,10 +487,6 @@ class Meal_assignmentView(APIView):
 
 
 
-
-
-
-
 class Enquery_change_view(APIView):
     permission_classes = [IsAuthenticated]
 

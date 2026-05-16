@@ -1,6 +1,6 @@
 
 
-from .views import GPayPaymentView, ViewMyHostel,Hostler_view, my_room,PaymentsView,CreatePayment,VerifyPayment
+from .views import GPayPaymentView, RoomChatMessagesView, ViewMyHostel,Hostler_view, my_room,PaymentsView,CreatePayment,VerifyPayment
 from django.urls import path
 
 urlpatterns = [
@@ -10,6 +10,6 @@ urlpatterns = [
     path("create-payment/",CreatePayment.as_view()),
     path("verify-payment/",VerifyPayment.as_view()),
     path("my_room/",my_room.as_view(),name="my_room"),
-    path("gpay-payment/<int:transaction_id>/",GPayPaymentView.as_view()
-),
+    path("gpay-payment/<int:transaction_id>/",GPayPaymentView.as_view()),
+    path("room-chat/<int:group_id>/messages/",RoomChatMessagesView.as_view()),
 ]

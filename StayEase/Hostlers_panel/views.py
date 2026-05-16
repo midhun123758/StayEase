@@ -10,6 +10,8 @@ from django.conf import settings
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 import razorpay
+from .models import RoomChatGroup, RoomChatMessage
+from .serializers import RoomChatMessageSerializer
 
 class Hostler_view(APIView):
     def get(sself,request):
@@ -294,3 +296,53 @@ class GPayPaymentView(APIView):
                 "message": str(e)
 
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class RoomChatMessagesView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, group_id):
+
+        group = RoomChatGroup.objects.get(id=group_id)
+
+        messages = group.messages.select_related(
+            "sender"
+        ).order_by("created_at")
+
+        serializer = RoomChatMessageSerializer(
+            messages,
+            many=True
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    def post(self, request, group_id):
+
+        group = RoomChatGroup.objects.get(id=group_id)
+
+        hostler = Hostler.objects.get(
+            user=request.user
+        )
+
+        if hostler not in group.members.all():
+
+            return Response({
+                "error":
+                "You are not part of this room"
+            }, status=403)
+
+        message = RoomChatMessage.objects.create(
+            group=group,
+            sender=request.user,
+            message=request.data.get("message")
+        )
+
+        serializer = RoomChatMessageSerializer(message)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED
+        )

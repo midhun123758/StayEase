@@ -45,8 +45,8 @@ INSTALLED_APPS = [
     "phonenumber_field",
     "cloudinary_storage",
     'cloudinary',
-    'Hostlers_panel',
     'django_celery_beat',
+    'Hostlers_panel.apps.HostlerPanelConfig'
 
 ]
 

@@ -9,6 +9,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from Base_Panel.models import Room,Room_image
+from .models import RoomChatMessage
 
 class HostelSerializer(serializers.ModelSerializer):
     class Meta:
@@ -141,3 +142,27 @@ class HostlerRoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hostler
         fields = "__all__"
+
+class RoomChatMessageSerializer(serializers.ModelSerializer):
+
+    sender_name = serializers.CharField(
+        source="sender.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = RoomChatMessage
+
+        fields = [
+            "id",
+            "group",
+            "sender",
+            "sender_name",
+            "message",
+            "created_at"
+        ]
+
+        read_only_fields = [
+            "sender",
+            "created_at"
+        ]

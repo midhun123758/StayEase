@@ -2,16 +2,18 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from Base_Panel.models import Hostler
+from Base_Panel.models import AssignedMeal, Hostler, MessCharge
 from App.models import KycDocument
+from Base_Panel.serilalizers import AssignedMealSerializer
 from .serializers import HostelViewSerializer,HostlerViewSerializer, PaymentSerializer,Room_Serializer,HostlerRoomSerializer
 from Base_Panel.models import Transaction
 from django.conf import settings
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 import razorpay
-from .models import RoomChatGroup, RoomChatMessage
+from .models import MealResponse, RoomChatGroup, RoomChatMessage
 from .serializers import RoomChatMessageSerializer
+
 
 class Hostler_view(APIView):
     def get(sself,request):
@@ -303,46 +305,411 @@ class RoomChatMessagesView(APIView):
 
     def get(self, request, group_id):
 
-        group = RoomChatGroup.objects.get(id=group_id)
+        try:
 
-        messages = group.messages.select_related(
-            "sender"
-        ).order_by("created_at")
+            # Get logged-in hostler
+            hostler = Hostler.objects.get(
+                user=request.user
+            )
 
-        serializer = RoomChatMessageSerializer(
-            messages,
-            many=True
-        )
+            # Check if group exists
+            group = RoomChatGroup.objects.get(
+                id=group_id
+            )
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-        )
+            # Security check
+            if not group.members.filter(
+                id=hostler.id
+            ).exists():
 
-    def post(self, request, group_id):
+                return Response(
+                    {
+                        "error": "You are not part of this room"
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
-        group = RoomChatGroup.objects.get(id=group_id)
+            # Get latest messages
+            messages = group.messages.select_related(
+                "sender"
+            ).order_by("-created_at")[:50]
 
-        hostler = Hostler.objects.get(
-            user=request.user
-        )
+            # Reverse for oldest -> newest
+            messages = reversed(messages)
 
-        if hostler not in group.members.all():
+            serializer = RoomChatMessageSerializer(
+                messages,
+                many=True
+            )
 
-            return Response({
-                "error":
-                "You are not part of this room"
-            }, status=403)
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
 
-        message = RoomChatMessage.objects.create(
-            group=group,
-            sender=request.user,
-            message=request.data.get("message")
-        )
+        except Hostler.DoesNotExist:
 
-        serializer = RoomChatMessageSerializer(message)
+            return Response(
+                {
+                    "error": "Hostler profile not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED
-        )
+        except RoomChatGroup.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "Room group not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+class MyRoomChatView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        try:
+
+            hostler = Hostler.objects.get(
+                user=request.user
+            )
+
+            if not hostler.room:
+
+                return Response(
+                    {
+                        "error": "Room not assigned"
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            group = RoomChatGroup.objects.get(
+                room=hostler.room
+            )
+
+            return Response(
+                {
+                    "group_id": group.id,
+                    "room_number": hostler.room.room_number
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Hostler.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "Hostler not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except RoomChatGroup.DoesNotExist:
+            return Response(
+                {
+                    "error": "Room chat group not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+
+class RespondMealView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        meal_id = request.data.get("meal_id")
+        response_value = request.data.get("response")
+
+        try:
+
+            hostler = Hostler.objects.get(
+                user=request.user
+            )
+
+            meal = AssignedMeal.objects.get(
+                id=meal_id
+            )
+
+            # CHECK LOCK
+            if meal.is_locked:
+                return Response(
+                    {"error": "Meal response locked"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # CHECK DEADLINE
+            if meal.response_deadline and timezone.now() > meal.response_deadline:
+
+                meal.is_locked = True
+                meal.save()
+
+                return Response(
+                    {"error": "Response time expired"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            meal_response, created = MealResponse.objects.update_or_create(
+                assigned_meal=meal,
+                hostler=hostler,
+                defaults={
+                    "response": response_value
+                }
+            )
+
+            # WANT → CREATE CHARGE
+            if response_value == "WANT":
+
+                MessCharge.objects.get_or_create(
+                    hostel=meal.hostel,
+                    hostler=hostler,
+                    assigned_meal=meal,
+                    date=meal.date,
+                    meal_type=meal.meal_type,
+                    defaults={
+                        "amount": meal.amount_per_hostler
+                    }
+                )
+
+            # DON'T WANT → REMOVE CHARGE
+            else:
+
+                MessCharge.objects.filter(
+                    hostler=hostler,
+                    assigned_meal=meal
+                ).delete()
+
+            return Response(
+                {
+                    "message": "Meal response updated",
+                    "response": response_value,
+                    "is_locked": meal.is_locked,
+                    "response_deadline": meal.response_deadline,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Hostler.DoesNotExist:
+
+            return Response(
+                {"error": "Hostler not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except AssignedMeal.DoesNotExist:
+
+            return Response(
+                {"error": "Meal not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except Exception as e:
+
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+
+class ReactMealView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        meal_id = request.data.get("meal_id")
+        reaction = request.data.get("reaction")
+
+        try:
+
+            meal = AssignedMeal.objects.get(
+                id=meal_id
+            )
+
+            # CHECK LOCK
+            if meal.is_locked:
+                return Response(
+                    {"error": "Meal response locked"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # CHECK DEADLINE
+            if meal.response_deadline and timezone.now() > meal.response_deadline:
+
+                meal.is_locked = True
+                meal.save()
+
+                return Response(
+                    {"error": "Response time expired"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            user = request.user
+
+            # LIKE
+            if reaction == "LIKE":
+
+                meal.likes.add(user)
+                meal.dislikes.remove(user)
+
+            # DISLIKE
+            elif reaction == "DISLIKE":
+
+                meal.dislikes.add(user)
+                meal.likes.remove(user)
+
+            else:
+
+                return Response(
+                    {"error": "Invalid reaction"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(
+                {
+                    "message": f"{reaction} added",
+                    "total_likes": meal.likes.count(),
+                    "total_dislikes": meal.dislikes.count(),
+                    "is_locked": meal.is_locked,
+                    "response_deadline": meal.response_deadline,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except AssignedMeal.DoesNotExist:
+
+            return Response(
+                {"error": "Meal not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except Exception as e:
+
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+class TodayMealsView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        try:
+
+            hostler = Hostler.objects.get(
+                user=request.user
+            )
+
+            meals = AssignedMeal.objects.filter(
+                hostel=hostler.hostel
+            ).select_related(
+                "meal_item"
+            ).prefetch_related(
+                "likes",
+                "dislikes"
+            ).order_by("-created_at")
+
+            data = []
+
+            for meal in meals:
+
+                user_reaction = None
+
+                if meal.likes.filter(
+                    id=request.user.id
+                ).exists():
+
+                    user_reaction = "LIKE"
+
+                elif meal.dislikes.filter(
+                    id=request.user.id
+                ).exists():
+
+                    user_reaction = "DISLIKE"
+
+                try:
+
+                    meal_response = MealResponse.objects.get(
+                        assigned_meal=meal,
+                        hostler=hostler
+                    )
+
+                    user_response = meal_response.response
+
+                except MealResponse.DoesNotExist:
+
+                    user_response = None
+
+                data.append({
+
+                    "id":
+                        meal.id,
+
+                    "meal_name":
+                        meal.meal_item.name
+                        if meal.meal_item else None,
+
+                    "meal_type":
+                        meal.meal_type,
+
+                    "description":
+                        meal.description,
+
+                    "meal_image":
+                        request.build_absolute_uri(
+                            meal.meal_image.url
+                        )
+                        if meal.meal_image else None,
+
+                    "amount_per_hostler":
+                        meal.amount_per_hostler,
+
+                    "date":
+                        meal.date,
+
+                    "response_deadline":
+                        meal.response_deadline,
+
+                    "is_locked":
+                        meal.is_locked,
+
+                    "total_likes":
+                        meal.likes.count(),
+
+                    "total_dislikes":
+                        meal.dislikes.count(),
+
+                    "user_reaction":
+                        user_reaction,
+
+                    "user_response":
+                        user_response,
+                })
+
+            return Response(
+                data,
+                status=status.HTTP_200_OK
+            )
+
+        except Hostler.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "Hostler not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except Exception as e:
+
+            return Response(
+                {
+                    "error": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )

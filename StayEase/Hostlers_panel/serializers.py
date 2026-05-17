@@ -9,7 +9,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from Base_Panel.models import Room,Room_image
-from .models import RoomChatMessage
+from .models import MealResponse, RoomChatMessage
 
 class HostelSerializer(serializers.ModelSerializer):
     class Meta:
@@ -84,7 +84,6 @@ class PaymentSerializer(serializers.ModelSerializer):
         return None
 
     # DAYS LEFT
-
     def get_days_left(self, obj):
 
         if obj.hostler and obj.hostler.joining_date:
@@ -166,3 +165,9 @@ class RoomChatMessageSerializer(serializers.ModelSerializer):
             "sender",
             "created_at"
         ]
+
+class MealResponseSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = MealResponse
+        fields = "__all__"

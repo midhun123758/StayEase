@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.shortcuts import render
 from rest_framework import status
 from App.models import User
+from Hostlers_panel.models import MealResponse
 from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
 # Create your views here.
 from rest_framework.views import APIView
@@ -20,6 +21,7 @@ from .models import OwnerSubscription
 import razorpay
 from django.conf import settings
 from Client_panel.utils import send_client_notification
+from datetime import timedelta
 
 
 class HostelListView(APIView):
@@ -302,7 +304,11 @@ class DailyMealAssignmentView(APIView):
                     "amount_per_hostler": amount_per_hostler or 0,
                     "description": description,
                     "meal_image": meal_image,
+                    "response_deadline":timezone.now() + timedelta(hours=12),
+                    "is_locked":False,
                 }
+
+                
             )
 
             # CREATE / UPDATE MESS CHARGES
@@ -870,3 +876,60 @@ class SubscriptionDetailView(APIView):
         }, status=200)
     
 
+class MealResponsesView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, meal_id):
+        try:
+
+            meal = AssignedMeal.objects.get(
+                id=meal_id,
+                hostel__owner=request.user
+            )
+
+            responses = MealResponse.objects.filter(
+                assigned_meal=meal
+            ).select_related("hostler__user")
+
+            response_data = []
+
+            for response in responses:
+
+                response_data.append({
+                    "hostler_name":
+                        response.hostler.user.username,
+
+                    "response":
+                        response.response
+                })
+
+            likes = meal.likes.values_list(
+                "username",
+                flat=True
+            )
+            dislikes = meal.dislikes.values_list(
+                "username",
+                flat=True
+            )
+            return Response(
+                {
+                    "meal": meal.meal_item.name
+                        if meal.meal_item else None,
+
+                    "responses": response_data,
+
+                    "likes": list(likes),
+
+                    "dislikes": list(dislikes),
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+
+            return Response(
+                {
+                    "error": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )

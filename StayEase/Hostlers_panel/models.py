@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings
 from App.models import User
-from Base_Panel.models import Hostel, Hostler, Room
+from Base_Panel.models import AssignedMeal, Hostel, Hostler, Room
 # Create your models here.
 class Notification(models.Model):
 
@@ -54,3 +54,42 @@ on_delete=models.CASCADE,
 
     def __str__(self):
         return f"{self.sender.username} - {self.group.room.room_number}"
+    
+
+
+class MealResponse(models.Model):
+
+    RESPONSE_CHOICES = (
+        ("WANT", "Want"),
+        ("NOT_WANT", "Not Want"),
+    )
+
+    assigned_meal = models.ForeignKey(
+        AssignedMeal,
+        on_delete=models.CASCADE,
+        related_name="responses"
+    )
+
+    hostler = models.ForeignKey(
+        Hostler,
+        on_delete=models.CASCADE,
+        related_name="meal_responses"
+    )
+
+    response = models.CharField(
+        max_length=20,
+        choices=RESPONSE_CHOICES
+    )
+
+    created_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        unique_together = ("assigned_meal", "hostler")
+
+    def __str__(self):
+        return f"{self.hostler} - {self.response}"
+    
+
+

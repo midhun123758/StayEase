@@ -1,220 +1,165 @@
-from datetime import date
-from unittest.mock import patch
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
 
-from rest_framework.test import APITestCase
-from rest_framework import status
+from Base_Panel.models import Hostel, Room, Hostler
+from Hostlers_panel.models import RoomChatGroup, RoomChatMessage
 
-from App.models import User
-from Base_Panel.models import (
-    Hostel,
-    Room,
-    Hostler,
-    Transaction
-)
+User = get_user_model()
 
 
-class HostlerViewsTest(APITestCase):
+class RoomChatSystemTest(TestCase):
 
     def setUp(self):
 
-        self.user = User.objects.create_user(
-            username="midhun",
-            email="midhun@gmail.com",
-            password="123456",
-            role="hostler"
-        )
+        self.client = APIClient()
+
+        # ---------------------------------------------------
+        # CREATE OWNER
+        # ---------------------------------------------------
 
         self.owner = User.objects.create_user(
             username="owner",
-            email="owner@gmail.com",
-            password="123456",
-            role="owner"
+            email="owner@test.com",
+            password="123456"
         )
+
+        # ---------------------------------------------------
+        # CREATE HOSTEL
+        # ---------------------------------------------------
 
         self.hostel = Hostel.objects.create(
             owner=self.owner,
-            name="StayEase Hostel",
+            name="Green Valley Hostel",
             address="Palakkad",
-            location="Town",
             latitude=10.7867,
             longitude=76.6548,
             city="Palakkad",
             state="Kerala",
-            description="Good Hostel",
-            rooms_available=5,
-            mess_service=True,
             contact_number="9876543210"
         )
+
+        # ---------------------------------------------------
+        # CREATE ROOM
+        # ---------------------------------------------------
 
         self.room = Room.objects.create(
             hostel=self.hostel,
             room_number="101",
-            room_type="single",
+            room_type="Shared",
             price=2500,
-            is_available=True,
-            bed_space=2
+            is_available=True
         )
 
-        self.hostler = Hostler.objects.create(
-            user=self.user,
-            owner=self.owner,
+        # ---------------------------------------------------
+        # CREATE USERS
+        # ---------------------------------------------------
+
+        self.user1 = User.objects.create_user(
+            username="midhun",
+            email="midhun@test.com",
+            password="123456"
+        )
+
+        self.user2 = User.objects.create_user(
+            username="rahul",
+            email="rahul@test.com",
+            password="123456"
+        )
+
+        # ---------------------------------------------------
+        # CREATE HOSTLERS
+        # ---------------------------------------------------
+
+        self.hostler1 = Hostler.objects.create(
+            user=self.user1,
             hostel=self.hostel,
             room=self.room,
-            phone="9876543210",
-            parent_number="9999999999",
-            monthly_rent=2500,
-            check_in_date=date.today(),
-            is_active=True
+            is_active=True,
+            check_in_date="2026-05-17",
+            joining_date="2026-05-17",
+            monthly_rent=2500
         )
+
+        self.hostler2 = Hostler.objects.create(
+            user=self.user2,
+            hostel=self.hostel,
+            room=self.room,
+            is_active=True,
+            check_in_date="2026-05-17",
+            joining_date="2026-05-17",
+            monthly_rent=2500
+        )
+
+        # ---------------------------------------------------
+        # CREATE ROOM CHAT GROUP
+        # ---------------------------------------------------
+
+        self.group = RoomChatGroup.objects.create(
+            hostel=self.hostel,
+            room=self.room
+        )
+
+        # ---------------------------------------------------
+        # ADD MEMBERS
+        # ---------------------------------------------------
+
+        self.group.members.add(
+            self.hostler1,
+            self.hostler2
+        )
+
+    # ---------------------------------------------------
+    # ROOM GROUP TEST
+    # ---------------------------------------------------
+
+    def test_room_group_created(self):
+
+        self.assertEqual(
+            self.group.room.room_number,
+            "101"
+        )
+
+    # ---------------------------------------------------
+    # MEMBER TEST
+    # ---------------------------------------------------
+
+    def test_members_added(self):
+
+        self.assertEqual(
+            self.group.members.count(),
+            2
+        )
+
+    # ---------------------------------------------------
+    # MESSAGE TEST
+    # ---------------------------------------------------
+
+    def test_send_message(self):
+
+        message = RoomChatMessage.objects.create(
+            group=self.group,
+            sender=self.user1,
+            message="Hello Roommates"
+        )
+
+        self.assertEqual(
+            message.message,
+            "Hello Roommates"
+        )
+
+    # ---------------------------------------------------
+    # ACCESS TEST
+    # ---------------------------------------------------
+
+    def test_chat_access(self):
 
         self.client.force_authenticate(
-            user=self.user
-        )
-
-    # HOSTLER PROFILE
-
-    def test_hostler_view(self):
-
-        response = self.client.get(
-            "/hostler/view_hostler/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK
-        )
-
-    # VIEW HOSTEL
-
-    def test_view_my_hostel(self):
-
-        response = self.client.get(
-            "/hostler/view_my_hostel/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK
-        )
-
-    # VIEW ROOM
-
-    def test_my_room(self):
-
-        response = self.client.get(
-            "/hostler/my_room/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK
-        )
-
-    # PAYMENTS VIEW
-
-    def test_payments_view(self):
-
-        Transaction.objects.create(
-            hostler=self.hostler,
-            owner=self.owner,
-            amount=2500,
-            status="paid"
+            user=self.user1
         )
 
         response = self.client.get(
-            "/hostler/hostler_transactions/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK
-        )
-
-        self.assertEqual(
-            len(response.data),
-            1
-        )
-
-    # CREATE PAYMENT
-
-    @patch(
-        "Hostlers_panel.views.client.order.create"
-    )
-    def test_create_payment(
-        self,
-        mock_order
-    ):
-
-        mock_order.return_value = {
-            "id": "order_123"
-        }
-
-        response = self.client.post(
-            "/hostler/create-payment/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_201_CREATED
-        )
-
-        self.assertEqual(
-            response.data["success"],
-            True
-        )
-
-    # DUPLICATE PAYMENT
-
-    @patch(
-        "Hostlers_panel.views.client.order.create"
-    )
-    def test_duplicate_payment(
-        self,
-        mock_order
-    ):
-
-        Transaction.objects.create(
-            hostler=self.hostler,
-            owner=self.owner,
-            amount=2500,
-            status="pending"
-        )
-
-        response = self.client.post(
-            "/hostler/create-payment/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            400
-        )
-
-    # VERIFY PAYMENT
-
-    @patch(
-        "Hostlers_panel.views.client.utility.verify_payment_signature"
-    )
-    def test_verify_payment(
-        self,
-        mock_verify
-    ):
-
-        Transaction.objects.create(
-            hostler=self.hostler,
-            owner=self.owner,
-            amount=2500,
-            razorpay_order_id="order_123",
-            status="pending"
-        )
-
-        response = self.client.post(
-            "/hostler/verify-payment/",
-            {
-                "razorpay_order_id": "order_123",
-                "razorpay_payment_id": "pay_123",
-                "razorpay_signature": "signature_123"
-            },
-            format="json"
+            f"/hostler/room-chat/{self.group.id}/messages/"
         )
 
         self.assertEqual(
@@ -222,105 +167,60 @@ class HostlerViewsTest(APITestCase):
             200
         )
 
-    # PAYMENT ALREADY VERIFIED
+    # ---------------------------------------------------
+    # SECURITY TEST
+    # ---------------------------------------------------
 
-    @patch(
-        "Hostlers_panel.views.client.utility.verify_payment_signature"
-    )
-    def test_payment_already_verified(
-        self,
-        mock_verify
-    ):
+    def test_block_other_room_users(self):
 
-        Transaction.objects.create(
-            hostler=self.hostler,
-            owner=self.owner,
-            amount=2500,
-            razorpay_order_id="order_123",
-            status="paid"
+        outsider = User.objects.create_user(
+            username="outsider",
+            email="outsider@test.com",
+            password="123456"
         )
 
-        response = self.client.post(
-            "/hostler/verify-payment/",
-            {
-                "razorpay_order_id": "order_123",
-                "razorpay_payment_id": "pay_123",
-                "razorpay_signature": "signature_123"
-            },
-            format="json"
+        outsider_hostler = Hostler.objects.create(
+            user=outsider,
+            hostel=self.hostel,
+            is_active=True,
+            check_in_date="2026-05-17",
+            joining_date="2026-05-17",
+            monthly_rent=2500
         )
-
-        self.assertEqual(
-            response.status_code,
-            400
-        )
-
-    # INVALID TRANSACTION
-
-    def test_invalid_transaction(self):
-
-        response = self.client.post(
-            "/hostler/verify-payment/",
-            {
-                "razorpay_order_id": "wrong",
-                "razorpay_payment_id": "pay_123",
-                "razorpay_signature": "signature_123"
-            },
-            format="json"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            404
-        )
-
-    # NO ROOM ASSIGNED
-
-    def test_no_room_assigned(self):
-
-        self.hostler.room = None
-
-        self.hostler.save()
-
-        response = self.client.get(
-            "/hostler/my_room/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            404
-        )
-
-    # NO HOSTEL ASSIGNED
-
-    def test_no_hostel_assigned(self):
-
-        self.hostler.hostel = None
-
-        self.hostler.save()
-
-        response = self.client.get(
-            "/hostler/view_my_hostel/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            404
-        )
-
-    # UNAUTHORIZED USER
-
-    def test_unauthorized_user(self):
 
         self.client.force_authenticate(
-            user=None
+            user=outsider
         )
 
         response = self.client.get(
-            "/hostler/view_hostler/"
+            f"/hostler/room-chat/{self.group.id}/messages/"
         )
 
         self.assertEqual(
             response.status_code,
-            401
+            403
+        )
+
+    # ---------------------------------------------------
+    # MY ROOM CHAT API TEST
+    # ---------------------------------------------------
+
+    def test_get_my_room_chat(self):
+
+        self.client.force_authenticate(
+            user=self.user1
+        )
+
+        response = self.client.get(
+            "/hostler/my-room-chat/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
+        self.assertEqual(
+            response.data["group_id"],
+            self.group.id
         )

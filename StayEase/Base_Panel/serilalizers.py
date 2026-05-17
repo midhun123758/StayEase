@@ -1,8 +1,9 @@
 
 from django.utils import timezone
 from rest_framework import serializers
-from .models import AssignedMeal, Hostel,Hostler, MealTemplate,Room, Room_image, Subscription_Amount, Transaction
+from .models import AssignedMeal, Hostel,Hostler, MealTemplate, MessCharge,Room, Room_image, Subscription_Amount, Transaction
 from .models import User
+from django.db.models import Sum
 from Client_panel.models import Enquiry 
 class HostelSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.id')
@@ -169,16 +170,61 @@ class AssignedMealSerializer(serializers.ModelSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+
     days_until_due = serializers.SerializerMethodField()
+
+    mess_total = serializers.SerializerMethodField()
+
+    total_payable = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
-        fields = ['id', 'amount', 'billing_date', 'due_date', 'status', 'days_until_due']
+
+        fields = [
+            'id',
+            'amount',
+            'billing_date',
+            'due_date',
+            'status',
+            'days_until_due',
+            'mess_total',
+            'total_payable',
+        ]
+
 
     def get_days_until_due(self, obj):
-        remaining = (obj.due_date - timezone.now().date()).days
+
+        remaining = (
+            obj.due_date -
+            timezone.now().date()
+        ).days
+
         return max(0, remaining)
-    
+
+
+    def get_mess_total(self, obj):
+
+        mess_total = MessCharge.objects.filter(
+            hostler=obj.hostler,
+            is_paid=False
+        ).aggregate(
+            total=Sum("amount")
+        )["total"] or 0
+
+        return mess_total
+
+
+    def get_total_payable(self, obj):
+
+        mess_total = MessCharge.objects.filter(
+            hostler=obj.hostler,
+            is_paid=False
+        ).aggregate(
+            total=Sum("amount")
+        )["total"] or 0
+
+        return float(obj.amount) + float(mess_total)
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

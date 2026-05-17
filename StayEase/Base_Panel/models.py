@@ -143,6 +143,16 @@ class AssignedMeal(models.Model):
     class Meta:
         unique_together = ("hostel", "date", "meal_type")
         ordering = ["-date", "meal_type"]
+    
+    response_deadline = models.DateTimeField(
+    null=True,
+    blank=True
+    )
+    is_locked = models.BooleanField(
+    default=False
+    )
+
+
 
     @property
     def total_likes(self):

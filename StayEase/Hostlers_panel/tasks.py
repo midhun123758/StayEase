@@ -47,3 +47,23 @@ def generate_monthly_bills():
             print(f"Bill created for {hostler.user.username}")
 
     return "Monthly Bills Generated"
+
+
+from django.utils import timezone
+
+from .models import AssignedMeal
+
+
+@shared_task
+def lock_expired_meals():
+
+    meals = AssignedMeal.objects.filter(
+        response_deadline__lt=timezone.now(),
+        is_locked=False
+    )
+
+    updated_count = meals.update(
+        is_locked=True
+    )
+
+    return f"{updated_count} meals locked"

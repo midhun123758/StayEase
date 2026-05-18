@@ -24,6 +24,7 @@ urlpatterns = [
     path('hostel/', include('Base_Panel.urls')),
     path ('client/', include('Client_panel.urls')),
     path('hostler/', include('Hostlers_panel.urls')),
+    path('admin-panel/', include('Admin_panel.urls')),    
   
 ]
 if settings.DEBUG:

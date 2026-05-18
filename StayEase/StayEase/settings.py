@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'Hostlers_panel.apps.HostlerPanelConfig',
     'rest_framework_simplejwt.token_blacklist',
+    'Admin_panel'
 
 ]
 

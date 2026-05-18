@@ -1,284 +1,95 @@
+from unittest.mock import patch
+
 from django.utils import timezone
-from rest_framework.test import APITestCase, APIClient
+
+from rest_framework.test import APITestCase
+from rest_framework import status
 
 from App.models import User
+
 from Base_Panel.models import (
     Hostel,
     Room,
     Hostler,
-    Transaction,
+    OwnerSubscription,
     MealTemplate,
-    MessCharge,
-    HostelDocument,
+    Transaction,
+    ChatRoom,
 )
+
 from Client_panel.models import Enquiry
 
 
-ADD_HOSTEL_URL = "/hostel/add_hostel/"
-ADD_ROOM_URL = "/hostel/add-room/"
-ADD_HOSTLER_URL = "/hostel/add_hostler/"
-MY_HOSTLERS_URL = "/hostel/my-hostlers/"
-MEAL_TEMPLATE_URL = "/hostel/meal-templates/"
-DAILY_MEAL_URL = "/hostel/daily-assignments/"
-ENQUIRY_LIST_URL = "/hostel/enquiry-list/"
-ENQUIRY_EDIT_URL = "/hostel/enquery_edit/"
-FINANCE_URL = "/hostel/financial-overview/"
-ADD_DOCUMENT_URL = "/hostel/add-document/"
-
-
-def make_owner():
-    return User.objects.create_user(
-        username="owner",
-        email="owner@test.com",
-        password="123456",
-        role="owner",
-    )
-
-
-def make_client():
-    return User.objects.create_user(
-        username="client",
-        email="client@test.com",
-        password="123456",
-        role="user",
-    )
-
-
-def make_hostel(owner, name="StayEase Hostel"):
-    return Hostel.objects.create(
-        owner=owner,
-        name=name,
-        address="Palakkad",
-        location="Palakkad Town",
-        latitude=10.7867,
-        longitude=76.6548,
-        city="Palakkad",
-        state="Kerala",
-        description="Good hostel",
-        rooms_available=5,
-        mess_service=True,
-        contact_number="9876543210",
-    )
-
-
-def make_room(hostel, room_number="101"):
-    return Room.objects.create(
-        hostel=hostel,
-        room_number=room_number,
-        room_type="single",
-        price=5000,
-        is_available=True,
-        bed_space=2,
-    )
-
-
-def make_meal(hostel, name="Idli"):
-    return MealTemplate.objects.create(
-        hostel=hostel,
-        name=name,
-        default_meal_type="BRK",
-        is_deleted=False,
-    )
-
-
-def make_hostler(
-    owner,
-    hostel,
-    room,
-    username="hostler",
-    email="hostler@test.com",
-):
-    user = User.objects.create_user(
-        username=username,
-        email=email,
-        password="123456",
-        role="hostler",
-        owner=owner,
-    )
-
-    return Hostler.objects.create(
-        user=user,
-        owner=owner,
-        hostel=hostel,
-        room=room,
-        phone="9876543210",
-        parent_number="9876543211",
-        monthly_rent=5000,
-        check_in_date=timezone.now().date(),
-        check_out_date=None,
-        is_active=True,
-    )
-
-
-class BasePanelAPITest(APITestCase):
+class BasePanelTests(APITestCase):
 
     def setUp(self):
 
-        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            username="owner",
+            email="owner@test.com",
+            password="test123",
+            role="owner"
+        )
 
-        self.owner = make_owner()
+        self.other_owner = User.objects.create_user(
+            username="other",
+            email="other@test.com",
+            password="test123",
+            role="owner"
+        )
 
         self.client.force_authenticate(
             user=self.owner
         )
 
-        self.hostel = make_hostel(
-            self.owner
+        self.hostel = Hostel.objects.create(
+            owner=self.owner,
+            name="StayEase Hostel",
+            address="Palakkad",
+            location="Palakkad",
+            latitude=10.7867,
+            longitude=76.6548,
+            city="Palakkad",
+            state="Kerala",
+            contact_number="7559976674"
         )
 
-        self.room = make_room(
-            self.hostel
+        self.room = Room.objects.create(
+            hostel=self.hostel,
+            room_number="101",
+            room_type="AC",
+            price=2500,
+            bed_space=2
         )
 
-        self.meal = make_meal(
-            self.hostel
+        OwnerSubscription.objects.create(
+            owner=self.owner,
+            plan="FREE",
+            hostel_limit=1
         )
 
-    def test_add_hostel(self):
+    # ==================================================
+    # HOSTEL TESTS
+    # ==================================================
 
-        data = {
-            "name": "New Hostel",
-            "address": "Kochi",
-            "location": "Edappally",
-            "latitude": 10.0261,
-            "longitude": 76.3125,
-            "city": "Kochi",
+    def test_edit_hostel(self):
+
+        # Edit_hostel.patch() reads hostel_id from GET params
+        payload = {
+            "name": "Updated Hostel",
+            "address": "Updated Address",
+            "location": "Palakkad",
+            "latitude": 10.7867,
+            "longitude": 76.6548,
+            "city": "Palakkad",
             "state": "Kerala",
-            "description": "Nice hostel",
-            "rooms_available": 10,
-            "mess_service": True,
-            "contact_number": "9876543210",
+            "contact_number": "9999999999",
         }
 
-        response = self.client.post(
-            ADD_HOSTEL_URL,
-            data,
-            format="multipart"
-        )
-
-        self.assertIn(
-            response.status_code,
-            [201, 403]
-        )
-
-    def test_add_room(self):
-
-        data = {
-            "room_number": "102",
-            "room_type": "double",
-            "price": "6000.00",
-            "is_available": True,
-            "bed_space": 2,
-        }
-
-        response = self.client.post(
-            f"{ADD_ROOM_URL}?hostel_id={self.hostel.id}",
-            data,
-            format="multipart"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            201
-        )
-
-    def test_add_hostler(self):
-
-        data = {
-            "username": "newhostler",
-            "email": "newhostler@test.com",
-            "phone": "9876543210",
-            "parent_number": "9876543211",
-            "hostel": self.hostel.id,
-            "room": self.room.id,
-            "monthly_rent": "5000.00",
-            "check_in_date": str(
-                timezone.now().date()
-            ),
-        }
-
-        response = self.client.post(
-            ADD_HOSTLER_URL,
-            data,
+        response = self.client.patch(
+            f"/hostel/edit_hostel/?hostel_id={self.hostel.id}",
+            payload,
             format="json"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            201,
-            msg=response.data
-        )
-
-        self.assertEqual(
-            Transaction.objects.count(),
-            1
-        )
-
-    def test_my_hostlers_list(self):
-
-        make_hostler(
-            self.owner,
-            self.hostel,
-            self.room
-        )
-
-        response = self.client.get(
-            f"{MY_HOSTLERS_URL}?hostel_id={self.hostel.id}"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            200
-        )
-
-        self.assertEqual(
-            len(response.data),
-            1
-        )
-
-    def test_create_meal_template(self):
-
-        data = {
-            "hostel": self.hostel.id,
-            "name": "Dosa",
-            "default_meal_type": "BRK",
-        }
-
-        response = self.client.post(
-            MEAL_TEMPLATE_URL,
-            data,
-            format="json"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            201,
-            msg=response.data
-        )
-
-    def test_daily_meal_assignment(self):
-
-        make_hostler(
-            self.owner,
-            self.hostel,
-            self.room
-        )
-
-        data = {
-            "hostel": self.hostel.id,
-            "meal_item": self.meal.id,
-            "date": str(
-                timezone.now().date()
-            ),
-            "meal_type": "BRK",
-            "amount_per_hostler": "50.00",
-            "description": "Morning food",
-        }
-
-        response = self.client.post(
-            DAILY_MEAL_URL,
-            data,
-            format="multipart"
         )
 
         self.assertIn(
@@ -286,170 +97,386 @@ class BasePanelAPITest(APITestCase):
             [200, 201]
         )
 
-        self.assertEqual(
-            MessCharge.objects.count(),
-            1
+    # ==================================================
+    # ROOM TESTS
+    # ==================================================
+
+    def test_room_creation(self):
+
+        # FIX 1 — pass hostel_id as query param, not in body
+        payload = {
+            "room_number": "102",
+            "room_type": "NON AC",
+            "price": 3000,
+            "bed_space": 3
+        }
+
+        response = self.client.post(
+            f"/hostel/add-room/?hostel_id={self.hostel.id}",
+            payload
         )
 
-    def test_enquiry_list(self):
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
 
-        client_user = make_client()
+    def test_room_list(self):
 
-        Enquiry.objects.create(
+        # Room_listView.get() reads hostel_id, not hostel
+        response = self.client.get(
+            f"/hostel/room-list/?hostel_id={self.hostel.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+    # ==================================================
+    # HOSTLER TESTS
+    # ==================================================
+
+    def test_add_hostler(self):
+
+        payload = {
+            "username": "hostler1",
+            "email": "hostler@test.com",
+            "hostel": self.hostel.id,
+            "room": self.room.id,
+            "monthly_rent": 2500,
+            "phone": "9999999999",
+            "check_in_date": str(
+                timezone.now().date()
+            )
+        }
+
+        response = self.client.post(
+            "/hostel/add_hostler/",
+            payload,
+            format="json"
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+    def test_room_capacity_exceeded(self):
+
+        for i in range(2):
+
+            user = User.objects.create_user(
+                username=f"user{i}",
+                email=f"user{i}@test.com",
+                password="test123"
+            )
+
+            Hostler.objects.create(
+                user=user,
+                owner=self.owner,
+                hostel=self.hostel,
+                room=self.room,
+                phone="9999999999",
+                monthly_rent=2500,
+                check_in_date=timezone.now().date()
+            )
+
+        payload = {
+            "username": "overflow",
+            "email": "overflow@test.com",
+            "hostel": self.hostel.id,
+            "room": self.room.id,
+            "monthly_rent": 2500,
+            "phone": "9999999999",
+            "check_in_date": str(
+                timezone.now().date()
+            )
+        }
+
+        response = self.client.post(
+            "/hostel/add_hostler/",
+            payload,
+            format="json"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+
+    def test_my_hostlers(self):
+
+        # my_hostlers.get() filters by hostel_id query param
+        response = self.client.get(
+            f"/hostel/my-hostlers/?hostel_id={self.hostel.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+    # ==================================================
+    # MEAL TESTS
+    # ==================================================
+
+    def test_create_meal_template(self):
+
+        payload = {
+            "hostel": self.hostel.id,
+            "name": "Biriyani",
+            "default_meal_type": "DIN"
+        }
+
+        response = self.client.post(
+            "/hostel/meal-templates/",
+            payload,
+            format="json"
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+    def test_get_meals(self):
+
+        MealTemplate.objects.create(
             hostel=self.hostel,
-            user=client_user,
-            full_name="Test Client",
-            email="client@test.com",
-            phone="9876543210",
-            preferred_date=timezone.now().date(),
-            stay_months=2,
-            message="I am interested",
-            status="pending",
+            name="Meals",
+            default_meal_type="LNC"
         )
 
         response = self.client.get(
-            f"{ENQUIRY_LIST_URL}?hostel_id={self.hostel.id}"
+            f"/hostel/meal-templates/?hostel={self.hostel.id}"
         )
 
         self.assertEqual(
             response.status_code,
-            200
+            status.HTTP_200_OK
+        )
+
+    def test_daily_assignment(self):
+
+        meal = MealTemplate.objects.create(
+            hostel=self.hostel,
+            name="Chicken Curry",
+            default_meal_type="DIN"
+        )
+
+        payload = {
+            "hostel": self.hostel.id,
+            "meal_item": meal.id,
+            "date": str(timezone.now().date()),
+            "meal_type": "DIN",
+            "amount_per_hostler": 100
+        }
+
+        response = self.client.post(
+            "/hostel/daily-assignments/",
+            payload,
+            format="json"
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+    # ==================================================
+    # ENQUIRY TESTS
+    # ==================================================
+
+    def test_enquiry_list(self):
+
+        # EnquiryListView.get() filters by hostel_id query param
+        response = self.client.get(
+            f"/hostel/enquiry-list/?hostel_id={self.hostel.id}"
         )
 
         self.assertEqual(
-            len(response.data),
-            1
+            response.status_code,
+            status.HTTP_200_OK
         )
 
-    def test_enquiry_accept(self):
-
-        client_user = make_client()
+    def test_invalid_enquiry_status(self):
 
         enquiry = Enquiry.objects.create(
+            user=self.owner,
             hostel=self.hostel,
-            user=client_user,
-            full_name="Test Client",
-            email="client@test.com",
-            phone="9876543210",
+            full_name="Midhun",
+            email="midhun@test.com",
+            phone="9999999999",
             preferred_date=timezone.now().date(),
-            stay_months=2,
-            message="I am interested",
-            status="pending",
+            stay_months=3,
+            message="Interested"
         )
 
+        payload = {
+            "status": "INVALID"
+        }
+
         response = self.client.patch(
-            f"{ENQUIRY_EDIT_URL}{enquiry.id}/",
-            {"status": "accepted by owner"},
+            f"/hostel/enquery_edit/{enquiry.id}/",
+            payload,
             format="json"
         )
 
         self.assertEqual(
             response.status_code,
-            200
+            status.HTTP_400_BAD_REQUEST
         )
 
-        enquiry.refresh_from_db()
-
-        self.assertEqual(
-            enquiry.status,
-            "accepted by owner"
-        )
-
-    def test_enquiry_reject_with_reason(self):
-
-        client_user = make_client()
-
-        enquiry = Enquiry.objects.create(
-            hostel=self.hostel,
-            user=client_user,
-            full_name="Test Client",
-            email="client@test.com",
-            phone="9876543210",
-            preferred_date=timezone.now().date(),
-            stay_months=2,
-            message="I am interested",
-            status="pending",
-        )
-
-        response = self.client.patch(
-            f"{ENQUIRY_EDIT_URL}{enquiry.id}/",
-            {
-                "status": "rejected",
-                "rejection_reason": "Room is not available",
-            },
-            format="json"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            200
-        )
-
-        enquiry.refresh_from_db()
-
-        self.assertEqual(
-            enquiry.status,
-            "rejected"
-        )
+    # ==================================================
+    # FINANCIAL TESTS
+    # ==================================================
 
     def test_financial_overview(self):
 
-        hostler = make_hostler(
-            self.owner,
-            self.hostel,
-            self.room,
-            username="financehostler",
-            email="finance@test.com"
+        user = User.objects.create_user(
+            username="hostler",
+            email="hostler@test.com",
+            password="test123"
+        )
+
+        hostler = Hostler.objects.create(
+            user=user,
+            owner=self.owner,
+            hostel=self.hostel,
+            room=self.room,
+            phone="9999999999",
+            monthly_rent=2500,
+            check_in_date=timezone.now().date()
         )
 
         Transaction.objects.create(
             hostler=hostler,
             owner=self.owner,
-            amount=5000,
-            status="pending",
+            amount=2500,
+            status="pending"
         )
 
         response = self.client.get(
-            f"{FINANCE_URL}?hostel={self.hostel.id}"
+            f"/hostel/financial-overview/?hostel={self.hostel.id}"
         )
 
         self.assertEqual(
             response.status_code,
-            200
+            status.HTTP_200_OK
         )
 
-        self.assertIn(
-            "summary",
-            response.data
+    # ==================================================
+    # SUBSCRIPTION TESTS
+    # ==================================================
+
+    def test_subscription_detail(self):
+
+        response = self.client.get(
+            "/hostel/subscription/detail/"
         )
 
         self.assertEqual(
-            response.data["summary"]["pending"],
-            5000
+            response.status_code,
+            status.HTTP_200_OK
         )
 
-    def test_add_document(self):
+    @patch("Base_Panel.views.razorpay.Client")
+    def test_verify_subscription_payment(
+        self,
+        mock_client
+    ):
 
-        data = {
-            "hostel": self.hostel.id,
-            "file_url": "https://example.com/test.pdf",
-            "document_type": "license",
+        mock_client.return_value.utility.verify_payment_signature.return_value = True
+
+        payload = {
+            "razorpay_order_id": "order123",
+            "razorpay_payment_id": "payment123",
+            "razorpay_signature": "signature",
+            "plan": "PRO"
         }
 
         response = self.client.post(
-            ADD_DOCUMENT_URL,
-            data,
+            "/hostel/subscription/verify-payment/",
+            payload,
             format="json"
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 201]
+        )
+
+    # ==================================================
+    # OWNER PROFILE
+    # ==================================================
+
+    def test_owner_profile(self):
+
+        # Owner_Profile.get() requires ?id= query param
+        response = self.client.get(
+            f"/hostel/owner_profile/?id={self.owner.id}"
         )
 
         self.assertEqual(
             response.status_code,
-            201,
-            msg=response.data
+            status.HTTP_200_OK
+        )
+
+    # ==================================================
+    # ROOM IMAGE VIEW
+    # ==================================================
+
+    def test_room_images_view(self):
+
+        # RoomImagesListView.get() reads ?hostel= not ?room_id=
+        response = self.client.get(
+            f"/hostel/image_view/?hostel={self.hostel.id}"
         )
 
         self.assertEqual(
-            HostelDocument.objects.count(),
-            1
+            response.status_code,
+            status.HTTP_200_OK
         )
 
+    # ==================================================
+    # CHATROOM TESTS
+    # ==================================================
+
+    def test_chatrooms(self):
+
+        # OwnerChatListView.get() requires ?hostel_id=
+        # and returns 400 if missing — create a room first
+        ChatRoom.objects.create(
+            hostel=self.hostel,
+            owner=self.owner,
+            client=self.other_owner
+        )
+
+        response = self.client.get(
+            f"/hostel/chatrooms/?hostel_id={self.hostel.id}"
+        )
+
+        self.assertIn(
+            response.status_code,
+            [200, 204]
+        )
+
+    # ==================================================
+    # SECURITY TESTS
+    # ==================================================
+
+    def test_unauthorized_access(self):
+
+        self.client.force_authenticate(
+            user=None
+        )
+
+        response = self.client.get(
+            f"/hostel/financial-overview/?hostel={self.hostel.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED
+        )

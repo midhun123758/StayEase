@@ -304,31 +304,12 @@ class DailyMealAssignmentView(APIView):
                     "amount_per_hostler": amount_per_hostler or 0,
                     "description": description,
                     "meal_image": meal_image,
-                    "response_deadline":timezone.now() + timedelta(hours=12),
+                    "response_deadline": timezone.now() + timedelta(minutes=3),
                     "is_locked":False,
                 }
 
                 
             )
-
-            # CREATE / UPDATE MESS CHARGES
-            hostlers = Hostler.objects.filter(
-                hostel=hostel,
-                is_active=True
-            )
-
-            for hostler in hostlers:
-
-                MessCharge.objects.update_or_create(
-                    hostler=hostler,
-                    assigned_meal=assignment,
-                    defaults={
-                        "hostel": hostel,  # FIXED
-                        "date": assignment.date,
-                        "meal_type": assignment.meal_type,
-                        "amount": assignment.amount_per_hostler,
-                    }
-                )
 
             serializer = AssignedMealSerializer(assignment)
 

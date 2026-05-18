@@ -2,7 +2,7 @@ from celery import shared_task
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-from Base_Panel.models import Hostler
+from Base_Panel.models import Hostler, MessCharge
 from Base_Panel.models import Transaction
 
 
@@ -51,19 +51,35 @@ def generate_monthly_bills():
 
 from django.utils import timezone
 
-from .models import AssignedMeal
-
+from .models import AssignedMeal, MealResponse
 
 @shared_task
-def lock_expired_meals():
+def create_meal_charges():
 
     meals = AssignedMeal.objects.filter(
-        response_deadline__lt=timezone.now(),
+        response_deadline__lte=timezone.now(),
         is_locked=False
     )
 
-    updated_count = meals.update(
-        is_locked=True
-    )
+    for meal in meals:
 
-    return f"{updated_count} meals locked"
+        wanted_responses = MealResponse.objects.filter(
+            assigned_meal=meal,
+            response="WANT"
+        )
+
+        for response in wanted_responses:
+
+            MessCharge.objects.get_or_create(
+                hostler=response.hostler,
+                assigned_meal=meal,
+                defaults={
+                    "hostel": meal.hostel,
+                    "date": meal.date,
+                    "meal_type": meal.meal_type,
+                    "amount": meal.amount_per_hostler,
+                }
+            )
+
+        meal.is_locked = True
+        meal.save()

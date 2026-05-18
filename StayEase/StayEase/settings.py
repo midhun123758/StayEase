@@ -46,7 +46,8 @@ INSTALLED_APPS = [
     "cloudinary_storage",
     'cloudinary',
     'django_celery_beat',
-    'Hostlers_panel.apps.HostlerPanelConfig'
+    'Hostlers_panel.apps.HostlerPanelConfig',
+    'rest_framework_simplejwt.token_blacklist',
 
 ]
 
@@ -162,18 +163,21 @@ CELERY_TIMEZONE = 'Asia/Kolkata'
 
 
 
-
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
+
     'generate-monthly-bills-everyday': {
         'task': 'Hostlers_panel.tasks.generate_monthly_bills',
         'schedule': crontab(hour=0, minute=1),
     },
+
+    'create-meal-charges-every-minute': {
+        'task': 'Hostlers_panel.tasks.create_meal_charges',
+        'schedule': 60.0,
+    },
+
 }
-
-
-
 
 
 

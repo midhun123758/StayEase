@@ -197,6 +197,29 @@ class MessCharge(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    razorpay_order_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
+    razorpay_payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
+    razorpay_signature = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True
+    )
+
+    payment_date = models.DateTimeField(
+        blank=True,
+        null=True
+    )
+
     class Meta:
         unique_together = ("hostler", "assigned_meal")
         ordering = ["-date"]

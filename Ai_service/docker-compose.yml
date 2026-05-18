@@ -1,52 +1,23 @@
 services:
+
   ai_service:
     build: .
     container_name: ai_service
+
     command: python manage.py runserver 0.0.0.0:8001
+
     env_file:
       - .env
+
     ports:
       - "8002:8001"
+
     volumes:
       - .:/app
-    depends_on:
-      ai_db:
-        condition: service_healthy
-      ai_redis:
-        condition: service_started
+
     networks:
       - stayease_network
-
-  ai_db:
-    image: postgres:15
-    container_name: Ai_db
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5434:5432"
-    volumes:
-      - ai_postgres_data:/var/lib/postgresql/data/
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - stayease_network
-
-  ai_redis:
-    image: redis:7
-    container_name: ai_redis
-    ports:
-      - "6381:6379"
-    networks:
-      - stayease_network
-
-volumes:
-  ai_postgres_data:
 
 networks:
   stayease_network:
-    external: true    
+    external: true

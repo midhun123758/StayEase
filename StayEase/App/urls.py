@@ -4,7 +4,7 @@ from .views import ResetPasswordView, login_view, signup_view,OwnerSignupView,Go
 urlpatterns = [
     path('login/', login_view.as_view(), name='login'),
     path('signup/', signup_view.as_view(), name='signup'),
-    path('logout/', login_view.as_view(), name='logout'),
+    path('logout/', logout_view.as_view(), name='logout'),
     path('owner/signup/', OwnerSignupView.as_view(), name='owner_signup'),
     path('google/login/', GoogleLoginView.as_view(), name='google_login'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),

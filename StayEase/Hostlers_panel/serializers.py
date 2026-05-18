@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from Base_Panel.models import Hostel,Hostler
+from Base_Panel.models import Hostel,Hostler, MessCharge
 from App.models import User
 from Base_Panel.models import Transaction
 
@@ -171,3 +171,18 @@ class MealResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = MealResponse
         fields = "__all__"
+
+
+
+class MessChargeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = MessCharge
+        fields = [
+            "id",
+            "amount",
+            "date",
+            "meal_type",
+            "is_paid",
+            "created_at",
+        ]

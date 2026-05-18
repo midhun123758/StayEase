@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from Base_Panel.models import AssignedMeal, Hostler, MessCharge
 from App.models import KycDocument
 from Base_Panel.serilalizers import AssignedMealSerializer
-from .serializers import HostelViewSerializer,HostlerViewSerializer, PaymentSerializer,Room_Serializer,HostlerRoomSerializer
+from .serializers import HostelViewSerializer,HostlerViewSerializer, MessChargeSerializer, PaymentSerializer,Room_Serializer,HostlerRoomSerializer
 from Base_Panel.models import Transaction
 from django.conf import settings
 from dateutil.relativedelta import relativedelta
@@ -46,6 +46,12 @@ class ViewMyHostel(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+
+client = razorpay.Client(
+    auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+)
+
+
 class PaymentsView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -53,19 +59,52 @@ class PaymentsView(APIView):
     def get(self, request):
 
         try:
+
             hostler = Hostler.objects.get(user=request.user)
 
-            payments = Transaction.objects.filter(
+            rent_payments = Transaction.objects.filter(
                 hostler=hostler
             ).order_by("-created_at")
 
-            serializer = PaymentSerializer(
-                payments,
+            mess_charges = MessCharge.objects.filter(
+                hostler=hostler
+            ).order_by("-created_at")
+
+            rent_serializer = PaymentSerializer(
+                rent_payments,
                 many=True
             )
 
+            mess_serializer = MessChargeSerializer(
+                mess_charges,
+                many=True
+            )
+
+            total_rent_due = sum(
+                payment.amount
+                for payment in rent_payments
+                if payment.status == "pending"
+            )
+
+            total_mess_due = sum(
+                charge.amount
+                for charge in mess_charges
+                if not charge.is_paid
+            )
+
+            total_payable = total_rent_due + total_mess_due
+
             return Response(
-                serializer.data,
+                {
+                    "rent_payments": rent_serializer.data,
+                    "mess_charges": mess_serializer.data,
+
+                    "summary": {
+                        "total_rent_due": total_rent_due,
+                        "total_mess_due": total_mess_due,
+                        "total_payable": total_payable,
+                    }
+                },
                 status=status.HTTP_200_OK
             )
 
@@ -75,13 +114,6 @@ class PaymentsView(APIView):
                 {"error": "You are not assigned as a Hostler"},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-client = razorpay.Client(
-    auth=(
-        settings.RAZORPAY_KEY_ID,
-        settings.RAZORPAY_KEY_SECRET
-    )
-)
 class CreatePayment(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -414,7 +446,6 @@ class MyRoomChatView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-
 class RespondMealView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -436,13 +467,17 @@ class RespondMealView(APIView):
 
             # CHECK LOCK
             if meal.is_locked:
+
                 return Response(
                     {"error": "Meal response locked"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # CHECK DEADLINE
-            if meal.response_deadline and timezone.now() > meal.response_deadline:
+            if (
+                meal.response_deadline and
+                timezone.now() > meal.response_deadline
+            ):
 
                 meal.is_locked = True
                 meal.save()
@@ -452,6 +487,7 @@ class RespondMealView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # SAVE RESPONSE ONLY
             meal_response, created = MealResponse.objects.update_or_create(
                 assigned_meal=meal,
                 hostler=hostler,
@@ -459,28 +495,6 @@ class RespondMealView(APIView):
                     "response": response_value
                 }
             )
-
-            # WANT → CREATE CHARGE
-            if response_value == "WANT":
-
-                MessCharge.objects.get_or_create(
-                    hostel=meal.hostel,
-                    hostler=hostler,
-                    assigned_meal=meal,
-                    date=meal.date,
-                    meal_type=meal.meal_type,
-                    defaults={
-                        "amount": meal.amount_per_hostler
-                    }
-                )
-
-            # DON'T WANT → REMOVE CHARGE
-            else:
-
-                MessCharge.objects.filter(
-                    hostler=hostler,
-                    assigned_meal=meal
-                ).delete()
 
             return Response(
                 {
@@ -512,7 +526,6 @@ class RespondMealView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
 
 class ReactMealView(APIView):
 
@@ -712,4 +725,274 @@ class TodayMealsView(APIView):
                     "error": str(e)
                 },
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+class CreateMessPayment(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        try:
+
+            mess_charge = MessCharge.objects.get(
+                id=request.data["mess_charge_id"],
+                hostler__user=request.user,
+                is_paid=False
+            )
+
+            amount = int(
+                float(mess_charge.amount) * 100
+            )
+
+            order = client.order.create({
+
+                "amount": amount,
+
+                "currency": "INR",
+
+                "payment_capture": 1
+            })
+
+            # IMPORTANT
+            mess_charge.razorpay_order_id = (
+                order["id"]
+            )
+
+            mess_charge.save()
+
+            return Response({
+
+                "success": True,
+
+                "order_id": order["id"],
+
+                "amount": amount,
+
+                "mess_charge_id": mess_charge.id,
+
+                "key": settings.RAZORPAY_KEY_ID
+            })
+
+        except MessCharge.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message": "Mess charge not found"
+
+            }, status=404)
+
+        except Exception as e:
+
+            return Response({
+
+                "success": False,
+
+                "message": str(e)
+
+            }, status=500)
+
+
+class VerifyMessPayment(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        try:
+
+            mess_charge = MessCharge.objects.get(
+                id=request.data.get("mess_charge_id"),
+                hostler__user=request.user
+            )
+
+            # CHECK ALREADY PAID
+            if mess_charge.is_paid:
+
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Mess bill already paid"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            razorpay_order_id = request.data.get(
+                "razorpay_order_id"
+            )
+
+            razorpay_payment_id = request.data.get(
+                "razorpay_payment_id"
+            )
+
+            razorpay_signature = request.data.get(
+                "razorpay_signature"
+            )
+
+            # VERIFY SIGNATURE
+            client.utility.verify_payment_signature({
+
+                "razorpay_order_id":
+                razorpay_order_id,
+
+                "razorpay_payment_id":
+                razorpay_payment_id,
+
+                "razorpay_signature":
+                razorpay_signature,
+            })
+
+            # SAVE PAYMENT
+            mess_charge.is_paid = True
+
+            mess_charge.payment_date = timezone.now()
+
+            mess_charge.razorpay_order_id = (
+                razorpay_order_id
+            )
+
+            mess_charge.razorpay_payment_id = (
+                razorpay_payment_id
+            )
+
+            mess_charge.razorpay_signature = (
+                razorpay_signature
+            )
+
+            mess_charge.save()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Mess payment successful"
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except MessCharge.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Mess charge not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except razorpay.errors.SignatureVerificationError:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Payment verification failed"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        except Exception as e:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+class GPayMessPaymentView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, charge_id):
+
+        try:
+
+            mess_charge = MessCharge.objects.get(
+                id=charge_id,
+                hostler__user=request.user
+            )
+
+            # CHECK ALREADY PAID
+            if mess_charge.is_paid:
+
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Mess bill already paid"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            owner = mess_charge.hostler.owner
+
+            kyc = KycDocument.objects.get(
+                user=owner
+            )
+
+            return Response(
+
+                {
+                    "success": True,
+
+                    "upi_id":
+                    kyc.upi_id,
+
+                    "account_holder_name":
+                    kyc.account_holder_name,
+
+                    "amount":
+                    mess_charge.amount,
+
+                    "mess_charge_id":
+                    mess_charge.id,
+
+                    "owner_name":
+                    owner.username,
+
+                    "meal_type":
+                    mess_charge.get_meal_type_display(),
+
+                    "date":
+                    mess_charge.date,
+                },
+
+                status=status.HTTP_200_OK
+            )
+
+        except MessCharge.DoesNotExist:
+
+            return Response(
+
+                {
+                    "success": False,
+                    "message": "Mess charge not found"
+                },
+
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except KycDocument.DoesNotExist:
+
+            return Response(
+
+                {
+                    "success": False,
+                    "message": "Owner KYC not found"
+                },
+
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        except Exception as e:
+
+            return Response(
+
+                {
+                    "success": False,
+                    "message": str(e)
+                },
+
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -1,6 +1,5 @@
 
-
-from .views import GPayPaymentView, MyRoomChatView, ReactMealView, RespondMealView, RoomChatMessagesView, TodayMealsView, ViewMyHostel,Hostler_view, my_room,PaymentsView,CreatePayment,VerifyPayment
+from .views import CreateMessPayment, GPayMessPaymentView, GPayPaymentView, MyRoomChatView, ReactMealView, RespondMealView, RoomChatMessagesView, TodayMealsView, VerifyMessPayment, ViewMyHostel,Hostler_view, my_room,PaymentsView,CreatePayment,VerifyPayment
 from django.urls import path
 
 urlpatterns = [
@@ -15,7 +14,9 @@ urlpatterns = [
     path("my-room-chat/",MyRoomChatView.as_view(),name="my_room_chat",),
     path("respond-meal/",RespondMealView.as_view()),
     path("today-meals/",TodayMealsView.as_view()),
-    path("react-meal/",ReactMealView.as_view()
-
-),
+    path("react-meal/",ReactMealView.as_view()),
+    path("create-mess-payment/",CreateMessPayment.as_view()),
+    path("verify-mess-payment/",VerifyMessPayment.as_view()),
+    path("gpay-mess-payment/<int:charge_id>/",GPayMessPaymentView.as_view()),
+    
 ]

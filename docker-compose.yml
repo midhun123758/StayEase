@@ -263,6 +263,44 @@ services:
       - stayease_network
 
 
+  test:
+    build: ./StayEase
+
+    command: python manage.py check
+
+    volumes:
+      - ./StayEase:/app
+
+    env_file:
+      - ./StayEase/.env
+
+    depends_on:
+      - stayease_db
+      - stayease_redis
+
+    networks:
+      - stayease_network
+
+
+
+  ai_test:
+    build: ./Ai_service
+
+    command: python manage.py check
+
+    volumes:
+      - ./Ai_service:/app
+
+    env_file:
+      - ./Ai_service/.env
+
+    depends_on:
+      - stayease_db
+      - stayease_redis
+
+    networks:
+      - stayease_network
+
 volumes:
   stayease_postgres_data:
     name: stayease_postgres_data
@@ -271,3 +309,6 @@ volumes:
 networks:
   stayease_network:
     driver: bridge
+
+
+  

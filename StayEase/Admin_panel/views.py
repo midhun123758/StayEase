@@ -1,195 +1,56 @@
-# # from django.shortcuts import render
-# # from django.utils import timezone
-# # # Create your views here.
-# # # Admin_panel/views.py
+from Base_Panel.models import HostelDocument
+from rest_framework.views import APIView
+from App.models import User
+from .serialzers import HostelDocumentSerializer
+from rest_framework.response import Response
+from rest_framework import status
 
-# # from rest_framework.views import APIView
-# # from rest_framework.response import Response
-# # from rest_framework import status
 
-# # from .permissions import IsPlatformAdmin
-# # # from .models import OwnerVerification
-# # # from .serializers import OwnerVerificationSerializer
-# # import boto3
+class PendingDocumentsView(APIView):
 
-# # from django.conf import settings
+    def get(self, request):
 
-# # # class PendingOwnersView(APIView):
+        documents = HostelDocument.objects.select_related(
+            "uploaded_by",
+            "hostel"
+        )
 
-# # #     permission_classes = [IsPlatformAdmin]
+        serializer = HostelDocumentSerializer(
+            documents,
+            many=True
+        )
 
-# # #     def get(self, request):
+        return Response(serializer.data)
 
-# # #         owners = OwnerVerification.objects.filter(
-# # #             status="PENDING"
-# # #         )
 
-# # #         serializer = OwnerVerificationSerializer(
-# # #             owners,
-# # #             many=True
-# # #         )
+class VerifyOwnerKYC(APIView):
 
-# # #         return Response(
-# # #             serializer.data,
-# # #             status=status.HTTP_200_OK
-# # #         )
-    
-# # # class ApproveOwnerView(APIView):
+    def post(self, request, user_id):
 
-# # #     permission_classes = [IsPlatformAdmin]
+        action = request.data.get("action")
 
-# # #     def post(self, request, verification_id):
+        try:
 
-# # #         verification = OwnerVerification.objects.get(
-# # #             id=verification_id
-# # #         )
+            owner = User.objects.get(
+                id=user_id,
+                role="owner"
+            )
 
-# # #         verification.status = "APPROVED"
+            if action == "approve":
+                owner.kyc_completed = True
 
-# # #         verification.verified_by = request.user
+            elif action == "reject":
+                owner.kyc_completed = False
 
-# # #         verification.verified_at = timezone.now()
+            owner.save()
 
-# # #         verification.save()
+            return Response({
+                "success": True,
+                "kyc_completed": owner.kyc_completed
+            })
 
-# # #         verification.owner.kyc_completed = True
-# # #         verification.owner.save()
+        except User.DoesNotExist:
 
-# # #         return Response({
-# # #             "message": "Owner approved successfully"
-# # #         })
-    
-
-# # class ViewImage(APIView):
-
-# #     def get(self, request):
-
-# #         file_key = "documents/test.jpg"
-
-# #         s3 = boto3.client(
-# #             "s3",
-# #             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-# #             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-# #             region_name=settings.AWS_S3_REGION_NAME
-# #         )
-
-# #         image_url = s3.generate_presigned_url(
-# #             ClientMethod="get_object",
-
-# #             Params={
-# #                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-# #                 "Key": file_key
-# #             },
-
-# #             ExpiresIn=3600
-# #         )
-
-# #         return Response({
-# #             "image_url": image_url
-# #         })
-
-# # Admin_panel/views.py
-# # Admin_panel/views.py
-# import os
-# import boto3
-
-# from botocore.client import Config
-
-# from dotenv import load_dotenv
-
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework import status
-
-
-# load_dotenv()
-
-
-# class ViewAllImages(APIView):
-
-#     def get(self, request):
-
-#         try:
-
-#             s3 = boto3.client(
-
-#                 "s3",
-
-#                 aws_access_key_id=os.getenv(
-#                     "AWS_ACCESS_KEY_ID"
-#                 ),
-
-#                 aws_secret_access_key=os.getenv(
-#                     "AWS_SECRET_ACCESS_KEY"
-#                 ),
-
-#                 region_name=os.getenv(
-#                     "AWS_REGION"
-#                 ),
-
-#                 config=Config(
-#                     signature_version="s3v4"
-#                 )
-#             )
-
-#             response = s3.list_objects_v2(
-
-#                 Bucket=os.getenv(
-#                     "AWS_STORAGE_BUCKET_NAME"
-#                 )
-#             )
-
-#             files = response.get(
-#                 "Contents",
-#                 []
-#             )
-
-#             images = []
-
-#             for file in files:
-
-#                 file_key = file.get("Key")
-
-#                 if not file_key:
-#                     continue
-
-#                 image_url = s3.generate_presigned_url(
-
-#                     ClientMethod="get_object",
-
-#                     Params={
-
-#                         "Bucket": os.getenv(
-#                             "AWS_STORAGE_BUCKET_NAME"
-#                         ),
-
-#                         "Key": file_key
-#                     },
-
-#                     ExpiresIn=3600
-#                 )
-
-#                 images.append({
-
-#                     "file_key": file_key,
-
-#                     "image_url": image_url
-#                 })
-
-#             return Response({
-
-#                 "success": True,
-
-#                 "images": images
-
-#             }, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-
-#             return Response({
-
-#                 "success": False,
-
-#                 "error": str(e)
-
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "error": "Owner not found"
+            }, status=status.HTTP_404_NOT_FOUND)

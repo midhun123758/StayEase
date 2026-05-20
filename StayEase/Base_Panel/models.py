@@ -33,7 +33,6 @@ class Hostel(models.Model):
 class HostelDocument(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="documents")
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
-
     file_url = models.URLField()   # S3 link
     document_type = models.CharField(max_length=50)
 

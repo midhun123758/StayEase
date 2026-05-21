@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     'Admin_panel'
 
 ]
-
+RABBITMQ_HOST = "rabbitmq"
 # ─── Middleware ───────────────────────────────────────────────────────────────
 #
 MIDDLEWARE = [

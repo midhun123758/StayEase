@@ -29,6 +29,34 @@ class Hostel(models.Model):
     def __str__(self):
         return self.name
     
+    def to_text(self):
+        mess = "Yes" if self.mess_service else "No"
+        return (
+            f"Hostel name: {self.name}. "
+            f"Located at {self.location}, {self.city}, {self.state}. "
+            f"Address: {self.address}. "
+            f"Rooms available: {self.rooms_available}. "
+            f"Mess service: {mess}. "
+            f"Description: {self.description or 'N/A'}. "
+            f"Contact: {self.contact_number or 'N/A'}."
+        )
+
+    def to_metadata(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "city": self.city,
+            "state": self.state,
+            "location": self.location,
+            "address": self.address,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "rooms_available": self.rooms_available,
+            "mess_service": self.mess_service,
+            "contact_number": self.contact_number or "",
+            "owner": self.owner.username,
+        }
+    
 
 class HostelDocument(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="documents")

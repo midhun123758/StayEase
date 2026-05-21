@@ -5,6 +5,7 @@ name: StayEase CI/CD
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main

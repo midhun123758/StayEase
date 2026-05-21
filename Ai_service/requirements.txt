@@ -1,3 +1,4 @@
+# Django
 Django
 djangorestframework
 psycopg2-binary
@@ -5,7 +6,17 @@ python-dotenv
 django-cors-headers
 Pillow
 requests
-grpcio
-grpcio-tools
-protobuf
 djangorestframework-simplejwt
+
+# FastAPI
+fastapi
+uvicorn
+pika
+aio-pika
+pydantic
+pydantic-settings
+httpx
+
+# AI + Vector
+google-genai 
+qdrant-client

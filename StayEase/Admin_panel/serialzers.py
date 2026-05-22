@@ -1,39 +1,42 @@
 from Base_Panel.models import HostelDocument
+
+from Base_Panel.serilalizers import HostelSerializer
+
+from App.serializer import Profile
+
 from rest_framework import serializers
 
-class HostelDocumentSerializer(serializers.ModelSerializer):
 
-    owner_name = serializers.CharField(
-        source="uploaded_by.username",
+class HostelDocumentSerializer(
+
+    serializers.ModelSerializer
+
+):
+
+    pdf_key = serializers.SerializerMethodField()
+
+
+    uploaded_by = Profile(
+
         read_only=True
+
     )
 
-    owner_email = serializers.CharField(
-        source="uploaded_by.email",
+
+    hostel = HostelSerializer(
+
         read_only=True
+
     )
 
-    kyc_completed = serializers.BooleanField(
-        source="uploaded_by.kyc_completed",
-        read_only=True
-    )
-
-    hostel_name = serializers.CharField(
-        source="hostel.name",
-        read_only=True
-    )
 
     class Meta:
 
         model = HostelDocument
 
-        fields = [
-            "id",
-            "owner_name",
-            "owner_email",
-            "hostel_name",
-            "document_type",
-            "file_url",
-            "uploaded_at",
-            "kyc_completed"
-        ]
+        fields = "__all__"
+
+
+    def get_pdf_key(self, obj):
+
+        return obj.file_url.split(".com/")[-1]

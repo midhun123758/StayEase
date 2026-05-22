@@ -11,6 +11,7 @@ name: StayEase CI/CD
       - main
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AWS_REGION: ${{ secrets.AWS_REGION }}
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
@@ -20,6 +21,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,25 +30,36 @@ jobs:
         run: |
           cat > StayEase/.env << EOF
           SECRET_KEY=${{ secrets.DJANGO_STAYEASE_SECRET_KEY }}
-          STAYEASE_DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
-          STAYEASE_DB_USER=${{ secrets.STAYEASE_DB_USER }}
-          STAYEASE_DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+
+          DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
+          DB_USER=${{ secrets.STAYEASE_DB_USER }}
+          DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+          DB_HOST=stayease_db
+          DB_PORT=5432
           EOF
 
       - name: Create AI Service .env
         run: |
           cat > Ai_service/.env << EOF
           SECRET_KEY=${{ secrets.AI_SERVICE_SECRET_KEY }}
-          STAYEASE_DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
-          STAYEASE_DB_USER=${{ secrets.STAYEASE_DB_USER }}
-          STAYEASE_DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+
+          DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
+          DB_USER=${{ secrets.STAYEASE_DB_USER }}
+          DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+          DB_HOST=stayease_db
+          DB_PORT=5432
           EOF
 
       - name: Start dependencies
         run: docker compose up -d stayease_db stayease_redis
 
       - name: Wait for DB
-        run: sleep 10
+        run: |
+          until docker compose exec stayease_db pg_isready -U ${{ secrets.STAYEASE_DB_USER }}
+          do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
 
       - name: Run StayEase tests
         run: docker compose run --rm test
@@ -62,6 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -80,16 +94,22 @@ jobs:
       - name: Build and push StayEase image
         run: |
           docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-${{ github.sha }} ./StayEase
-          docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-${{ github.sha }} \
-                     ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-latest
+
+          docker tag \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-${{ github.sha }} \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-latest
+
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-${{ github.sha }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:stayease-latest
 
       - name: Build and push AI Service image
         run: |
           docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }} ./Ai_service
-          docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }} \
-                     ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-latest
+
+          docker tag \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }} \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-latest
+
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:ai-latest
 
@@ -97,16 +117,19 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: build
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
+
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+
           script: |
             cd /home/ubuntu/StayEase
 
@@ -119,16 +142,22 @@ jobs:
 
             cat > StayEase/.env << EOF
             SECRET_KEY=${{ secrets.DJANGO_STAYEASE_SECRET_KEY }}
-            STAYEASE_DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
-            STAYEASE_DB_USER=${{ secrets.STAYEASE_DB_USER }}
-            STAYEASE_DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+
+            DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
+            DB_USER=${{ secrets.STAYEASE_DB_USER }}
+            DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+            DB_HOST=stayease_db
+            DB_PORT=5432
             EOF
 
             cat > Ai_service/.env << EOF
             SECRET_KEY=${{ secrets.AI_SERVICE_SECRET_KEY }}
-            STAYEASE_DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
-            STAYEASE_DB_USER=${{ secrets.STAYEASE_DB_USER }}
-            STAYEASE_DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+
+            DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
+            DB_USER=${{ secrets.STAYEASE_DB_USER }}
+            DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
+            DB_HOST=stayease_db
+            DB_PORT=5432
             EOF
 
             docker compose run --rm stayease_web python manage.py migrate

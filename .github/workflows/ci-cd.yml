@@ -62,7 +62,7 @@ jobs:
           done
 
       - name: Run StayEase tests
-        run: docker compose run --rm tes
+        run: docker compose run --rm test
 
       - name: Cleanup
         run: docker compose down

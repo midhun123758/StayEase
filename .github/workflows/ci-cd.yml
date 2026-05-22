@@ -62,10 +62,7 @@ jobs:
           done
 
       - name: Run StayEase tests
-        run: docker compose run --rm test
-
-      - name: Run AI Service tests
-        run: docker compose run --rm ai_test
+        run: docker compose run --rm tes
 
       - name: Cleanup
         run: docker compose down

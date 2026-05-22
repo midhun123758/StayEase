@@ -38,7 +38,19 @@ services:
       - "6379:6379"
     networks:
       - stayease_network
-
+  test:
+    build: ./StayEase
+    container_name: stayease_test
+    command: python manage.py test
+    volumes:
+      - ./StayEase:/app
+    env_file:
+      - ./StayEase/.env
+    depends_on:
+      - stayease_db
+      - stayease_redis
+    networks:
+      - stayease_network
   celery:
     build: ./StayEase
     container_name: stayease_celery

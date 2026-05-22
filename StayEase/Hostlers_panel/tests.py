@@ -72,6 +72,7 @@ class RoomChatSystemTest(TestCase):
         # ---------------------------------------------------
 
         self.hostler1 = Hostler.objects.create(
+            owner=self.owner,      # <-- FIX 1: Added Owner
             user=self.user1,
             hostel=self.hostel,
             room=self.room,
@@ -82,6 +83,7 @@ class RoomChatSystemTest(TestCase):
         )
 
         self.hostler2 = Hostler.objects.create(
+            owner=self.owner,      # <-- FIX 1: Added Owner
             user=self.user2,
             hostel=self.hostel,
             room=self.room,
@@ -94,10 +96,13 @@ class RoomChatSystemTest(TestCase):
         # ---------------------------------------------------
         # CREATE ROOM CHAT GROUP
         # ---------------------------------------------------
-
-        self.group = RoomChatGroup.objects.create(
-            hostel=self.hostel,
-            room=self.room
+        
+        # <-- FIX 2: Using get_or_create because a Signal likely already created it
+        self.group, created = RoomChatGroup.objects.get_or_create(
+            room=self.room,
+            defaults={
+                'hostel': self.hostel
+            }
         )
 
         # ---------------------------------------------------
@@ -180,6 +185,7 @@ class RoomChatSystemTest(TestCase):
         )
 
         outsider_hostler = Hostler.objects.create(
+            owner=self.owner,      # <-- FIX 1: Added Owner
             user=outsider,
             hostel=self.hostel,
             is_active=True,

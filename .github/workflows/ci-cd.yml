@@ -328,14 +328,12 @@ jobs:
             EOF
 
             # --- Fixed Docker typos ---
-            docker compose run --rm stayease_web python manage.py migrate
-            docker compose run --rm ai_service python manage.py migrate
+            docker-compose run --rm stayease_web python manage.py migrate
+            docker-compose run --rm ai_service python manage.py migrate
 
-            docker compose up -d --no-deps \
+            docker-compose up -d --no-deps \
               stayease_web \
               ai_service \
               celery \
               celery_beat \
               nginx
-
-            docker image prune -f

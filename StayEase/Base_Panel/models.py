@@ -285,96 +285,164 @@ class MonthlyMessBill(models.Model):
     def __str__(self):
         return f"{self.hostler} - {self.month}/{self.year} - ₹{self.total_amount}"
 
-
-
 class Transaction(models.Model):
 
     STATUS_CHOICES = [
         ('pending', 'Pending'),
+        ('partial', 'Partial'),
         ('paid', 'Paid'),
         ('overdue', 'Overdue'),
         ('failed', 'Failed'),
     ]
+
     PAYMENT_TYPE = [
         ('rent', 'Monthly Rent'),
         ('mess', 'Mess Fee'),
-        ('electricity', 'Electricity'),
+        ('cash', 'Cash'),
         ('full', 'Full Payment'),
     ]
+
+    PAYMENT_METHODS = [
+        ('cash', 'Cash'),
+        ('gpay', 'Google Pay'),
+        ('phonepe', 'PhonePe'),
+        ('paytm', 'Paytm'),
+        ('bank', 'Bank Transfer'),
+    ]
+
     hostler = models.ForeignKey(
         Hostler,
         on_delete=models.CASCADE,
         related_name='transactions'
     )
+
     owner = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='owner_transactions'
     )
+
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2
     )
+
+    paid_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+
+    remaining_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+
     payment_type = models.CharField(
         max_length=50,
         choices=PAYMENT_TYPE,
         default='rent'
     )
+
+    payment_method = models.CharField(
+        max_length=20,
+        choices=PAYMENT_METHODS,
+        null=True,
+        blank=True
+    )
+
+    payment_note = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    collected_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="collected_payments"
+    )
+
     billing_date = models.DateField(
         auto_now_add=True
     )
+
     due_date = models.DateField(
         null=True,
         blank=True
     )
+
     payment_date = models.DateTimeField(
         null=True,
         blank=True
     )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='pending'
     )
+
     # RAZORPAY
+
     razorpay_order_id = models.CharField(
         max_length=255,
         null=True,
         blank=True
     )
+
     razorpay_payment_id = models.CharField(
         max_length=255,
         null=True,
         blank=True
     )
+
     razorpay_signature = models.TextField(
         null=True,
         blank=True
     )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+
     updated_at = models.DateTimeField(
         auto_now=True
     )
+
     def save(self, *args, **kwargs):
 
-        # AUTO OWNER
         if not self.owner:
             self.owner = self.hostler.owner
 
-        # AUTO DUE DATE
         if not self.due_date:
             self.due_date = (
                 timezone.now().date()
                 + relativedelta(months=1)
             )
 
-        # AUTO OVERDUE
-        if (
+        # AUTO REMAINING
+        self.remaining_amount = (
+            self.amount - self.paid_amount
+        )
+
+        # AUTO STATUS
+
+        if self.remaining_amount <= 0:
+
+            self.status = "paid"
+
+        elif self.paid_amount > 0:
+
+            self.status = "partial"
+
+        elif (
             self.status == "pending"
             and self.due_date < timezone.now().date()
         ):
+
             self.status = "overdue"
 
         super().save(*args, **kwargs)
@@ -386,7 +454,6 @@ class Transaction(models.Model):
             f"{self.amount} - "
             f"{self.status}"
         )
-    
 
 class OwnerSubscription(models.Model):
 
@@ -435,3 +502,92 @@ class Subscription_Amount(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+# Base_Panel/models.py
+
+class HostelFeedback(models.Model):
+
+    RATING_CHOICES = (
+        (1, "1 Star"),
+        (2, "2 Stars"),
+        (3, "3 Stars"),
+        (4, "4 Stars"),
+        (5, "5 Stars"),
+    )
+
+    hostel = models.ForeignKey(
+        Hostel,
+        on_delete=models.CASCADE,
+        related_name="feedbacks"
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE
+    )
+
+    rating = models.IntegerField(
+        choices=RATING_CHOICES
+    )
+
+    review = models.TextField()
+
+    image = models.ImageField(
+        upload_to="feedbacks/",
+        blank=True,
+        null=True
+    )
+
+    owner_reply = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        unique_together = ["hostel", "user"]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.hostel.name}"
+    
+
+class BlacklistedHostler(models.Model):
+
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="owner_blacklist"
+    )
+
+    hostler = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="hostler_blacklisted"
+    )
+
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    reason = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    checked_out_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        unique_together = ("owner", "hostler")

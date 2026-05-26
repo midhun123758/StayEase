@@ -1,7 +1,7 @@
 
 from django.utils import timezone
 from rest_framework import serializers
-from .models import AssignedMeal, Hostel,Hostler, MealTemplate, MessCharge,Room, Room_image, Subscription_Amount, Transaction
+from .models import AssignedMeal, Hostel, HostelFeedback,Hostler, MealTemplate, MessCharge,Room, Room_image, Subscription_Amount, Transaction
 from .models import User
 from django.db.models import Sum
 from Client_panel.models import Enquiry 
@@ -238,3 +238,64 @@ class SubscriptionAmountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription_Amount
         fields = "__all__"
+
+# Base_Panel/serializers.py
+
+class HostelFeedbackSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = HostelFeedback
+
+        fields = [
+            "id",
+            "hostel",
+            "user",
+            "username",
+            "rating",
+            "review",
+            "image",
+            "owner_reply",
+            "created_at"
+        ]
+
+        read_only_fields = [
+            "user",
+            "owner_reply"
+        ]
+
+class HostlerCheckoutSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    email = serializers.EmailField(required=True)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# serializers.py
+
+class CollectPaymentSerializer(serializers.Serializer):
+
+    transaction_id = serializers.IntegerField()
+
+    amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    payment_method = serializers.ChoiceField(
+        choices=[
+            "cash",
+            "gpay",
+            "phonepe",
+            "paytm",
+            "bank"
+        ]
+    )
+
+    payment_note = serializers.CharField(
+        required=False,
+        allow_blank=True
+    )

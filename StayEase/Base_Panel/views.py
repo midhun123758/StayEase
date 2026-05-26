@@ -4,24 +4,27 @@ from django.shortcuts import render
 from rest_framework import status
 from App.models import User
 from Hostlers_panel.models import MealResponse
-from .models import AssignedMeal, ChatRoom, Hostel, HostelDocument, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
+from .models import AssignedMeal, BlacklistedHostler, ChatRoom, Hostel, HostelDocument, HostelFeedback, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response            
-from .serilalizers import AssignedMealSerializer, EnquirySerializer, HostelSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, SubscriptionAmountSerializer, UserSerializer
+from .serilalizers import AssignedMealSerializer, CollectPaymentSerializer, EnquirySerializer, HostelFeedbackSerializer, HostelSerializer, HostlerCheckoutSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, SubscriptionAmountSerializer, UserSerializer
 from rest_framework.permissions import IsAuthenticated
 from .utils.s3 import generate_presigned_url
 from .models import Room
 from .serilalizers import RoomSerializer ,MealTemplateSerializer  
 from Client_panel.models import Enquiry
 from django.db import transaction
-from django.db.models import Sum, Q
+from django.db.models import Avg, Sum, Q
 from rest_framework.parsers import MultiPartParser,FormParser
 from .models import OwnerSubscription
 import razorpay
 from django.conf import settings
 from Client_panel.utils import send_client_notification
 from datetime import timedelta
+from decimal import Decimal
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.core.mail import send_mail
 
 
 class HostelListView(APIView):
@@ -77,54 +80,148 @@ class HostelListView(APIView):
         )
 
         return Response(serializer.data)
+
 class AddHostlerView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+
         room_id = request.data.get("room")
-        monthly_rent = request.data.get("monthly_rent")
+
+        monthly_rent = request.data.get(
+            "monthly_rent"
+        )
+
+        # VALIDATE RENT
 
         if not monthly_rent:
-            return Response({"error": "Monthly rent is required."}, status=400)
+
+            return Response({
+                "error":
+                    "Monthly rent is required."
+            }, status=400)
 
         try:
-            room = Room.objects.get(id=room_id)
+
+            monthly_rent = Decimal(
+                str(monthly_rent)
+            )
+
+        except Exception:
+
+            return Response({
+                "error":
+                    "Invalid monthly rent amount."
+            }, status=400)
+
+        # GET ROOM
+
+        try:
+
+            room = Room.objects.get(
+                id=room_id
+            )
+
         except Room.DoesNotExist:
-            return Response({"error": "Room not found"}, status=404)
 
-        current_hostlers = Hostler.objects.filter(room=room).count()
+            return Response({
+                "error":
+                    "Room not found"
+            }, status=404)
+
+        # CHECK ROOM CAPACITY
+
+        current_hostlers = (
+            Hostler.objects.filter(
+                room=room
+            ).count()
+        )
+
         if current_hostlers >= room.bed_space:
-            return Response({"error": "This room is already full."}, status=400)
+
+            return Response({
+                "error":
+                    "This room is already full."
+            }, status=400)
 
         try:
+
             with transaction.atomic():
-                serializer = HostlerCreateSerializer(
-                    data=request.data,
-                    context={"request": request}
+
+                serializer = (
+                    HostlerCreateSerializer(
+                        data=request.data,
+                        context={
+                            "request": request
+                        }
+                    )
                 )
 
                 if serializer.is_valid():
-                    user = serializer.save()
-                    
-                    hostler = Hostler.objects.get(user=user)
-                    hostler.monthly_rent = monthly_rent
-                    hostler.save()
 
-                    Transaction.objects.create(
-                        hostler=hostler,
-                        owner=request.user,
-                        amount=monthly_rent,
-                        status='pending',
-                        billing_date=timezone.now().date()
+                    # CREATE USER
+
+                    user = serializer.save()
+
+                    # GET HOSTLER
+
+                    hostler = Hostler.objects.get(
+                        user=user
                     )
 
-                    response_serializer = HostlerSerializer(hostler)
-                    return Response(response_serializer.data, status=201)
-                
-                return Response(serializer.errors, status=400)
+                    # SAVE RENT
+
+                    hostler.monthly_rent = (
+                        monthly_rent
+                    )
+
+                    hostler.save()
+
+                    # CREATE INITIAL TRANSACTION
+
+                    Transaction.objects.create(
+
+                        hostler=hostler,
+
+                        owner=request.user,
+
+                        amount=monthly_rent,
+
+                        paid_amount=Decimal("0.00"),
+
+                        remaining_amount=monthly_rent,
+
+                        payment_type="rent",
+
+                        status="pending",
+
+                        billing_date=(
+                            timezone.now().date()
+                        )
+                    )
+
+                    response_serializer = (
+                        HostlerSerializer(
+                            hostler
+                        )
+                    )
+
+                    return Response(
+                        response_serializer.data,
+                        status=201
+                    )
+
+                return Response(
+                    serializer.errors,
+                    status=400
+                )
 
         except Exception as e:
-            return Response({"error": str(e)}, status=500)
+
+            return Response({
+                "error": str(e)
+            }, status=500)
         
 
 class GenerateUploadURL(APIView):
@@ -570,14 +667,20 @@ class Enquery_change_view(APIView):
 
 
 class FinancialOverviewView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+
         owner = request.user
+
         hostel_id = request.GET.get("hostel")
 
         if not hostel_id:
-            return Response({"error": "Hostel ID required"}, status=400)
+
+            return Response({
+                "error": "Hostel ID required"
+            }, status=400)
 
         transactions = Transaction.objects.filter(
             hostler__owner=owner,
@@ -585,47 +688,115 @@ class FinancialOverviewView(APIView):
         )
 
         stats = transactions.aggregate(
-            total_pending=Sum("amount", filter=Q(status="pending")),
-            total_collected=Sum("amount", filter=Q(status="paid")),
+
+            total_pending=Sum(
+                "amount",
+                filter=Q(status="pending")
+            ),
+
+            total_collected=Sum(
+                "amount",
+                filter=Q(status="paid")
+            ),
         )
 
         pending_hostlers = (
+
             Hostler.objects
+
             .filter(
                 owner=owner,
                 hostel_id=hostel_id,
                 transactions__status="pending"
             )
+
             .annotate(
+
                 total_due=Sum(
                     "transactions__amount",
-                    filter=Q(transactions__status="pending")
+                    filter=Q(
+                        transactions__status="pending"
+                    )
                 )
+
             )
-            .select_related("user", "room")
+
+            .select_related(
+                "user",
+                "room"
+            )
+
             .distinct()
         )
 
         hostler_dues = [
+
             {
-                "name": h.user.username,
-                "room": h.room.room_number if h.room else "N/A",
-                "amount_due": h.total_due or 0,
-                "phone": h.phone,
+
+                "name":
+                    h.user.username,
+
+                "room":
+                    h.room.room_number
+                    if h.room else "N/A",
+
+                "amount_due":
+                    h.total_due or 0,
+
+                "phone":
+                    h.phone,
+
+                "transactions": [
+
+                    {
+                        "transaction_id":
+                            t.id,
+
+                        "amount":
+                            t.amount,
+
+                        "payment_type":
+                            t.payment_type,
+
+                        "status":
+                            t.status,
+                    }
+
+                    for t in Transaction.objects.filter(
+                        hostler=h,
+                        status="pending"
+                    )
+                ]
             }
+
             for h in pending_hostlers
         ]
 
-        pending = stats["total_pending"] or 0
-        collected = stats["total_collected"] or 0
+        pending = (
+            stats["total_pending"] or 0
+        )
+
+        collected = (
+            stats["total_collected"] or 0
+        )
 
         return Response({
+
             "summary": {
-                "pending": pending,
-                "collected": collected,
-                "total_expected": pending + collected,
+
+                "pending":
+                    pending,
+
+                "collected":
+                    collected,
+
+                "total_expected":
+                    pending + collected,
             },
-            "payable_list": hostler_dues,
+
+            "payable_list":
+                hostler_dues,
+
         }, status=200)
 
 class RoomImagesListView(APIView):
@@ -914,3 +1085,639 @@ class MealResponsesView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+
+# Base_Panel/views.py
+
+class HostelFeedbackCreateView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, hostel_id):
+
+        try:
+
+            hostel = Hostel.objects.get(id=hostel_id)
+
+        except Hostel.DoesNotExist:
+
+            return Response({
+                "error": "Hostel not found"
+            }, status=404)
+
+        if HostelFeedback.objects.filter(
+            hostel=hostel,
+            user=request.user
+        ).exists():
+
+            return Response({
+                "error": "Feedback already submitted"
+            }, status=400)
+
+        serializer = HostelFeedbackSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+
+            serializer.save(
+                user=request.user,
+                hostel=hostel
+            )
+
+            return Response(
+                serializer.data,
+                status=201
+            )
+
+        return Response(
+            serializer.errors,
+            status=400
+        )
+    
+
+class OwnerReplyFeedbackView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, feedback_id):
+
+        try:
+
+            feedback = HostelFeedback.objects.get(
+                id=feedback_id
+            )
+
+        except HostelFeedback.DoesNotExist:
+
+            return Response({
+                "error": "Feedback not found"
+            }, status=404)
+
+        if feedback.hostel.owner != request.user:
+
+            return Response({
+                "error": "Permission denied"
+            }, status=403)
+
+        feedback.owner_reply = request.data.get(
+            "owner_reply"
+        )
+
+        feedback.save()
+
+        return Response({
+            "message": "Reply added"
+        })
+
+
+class HostelFeedbackListView(APIView):
+
+    def get(self, request, hostel_id):
+
+        feedbacks = HostelFeedback.objects.filter(
+            hostel_id=hostel_id
+        ).order_by("-created_at")
+
+        serializer = HostelFeedbackSerializer(
+            feedbacks,
+            many=True
+        )
+
+        average_rating = feedbacks.aggregate(
+            avg=Avg("rating")
+        )["avg"]
+
+        return Response({
+
+            "average_rating": average_rating,
+
+            "total_reviews": feedbacks.count(),
+
+            "reviews": serializer.data
+
+        })
+class HostlerCheckoutView(APIView):
+
+    authentication_classes = [JWTAuthentication]
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+
+        owner = request.user
+
+        # 1. PERMISSION CHECK
+
+        if owner.role != "owner":
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Only owners can checkout hostlers"
+
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. VALIDATE INPUT
+
+        serializer = HostlerCheckoutSerializer(
+            data=request.data
+        )
+
+        if not serializer.is_valid():
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Invalid input data",
+
+                "errors":
+                    serializer.errors
+
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        # 3. GET HOSTLER USER
+
+        try:
+
+            hostler_user = (
+                User.objects
+                .select_for_update()
+                .get(
+
+                    username=data["username"],
+
+                    email=data["email"],
+
+                    role="hostler",
+
+                    owner=owner
+                )
+            )
+
+        except User.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Hostler not found under this owner"
+
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 4. GET HOSTLER PROFILE
+
+        try:
+
+            hostler_profile = (
+                Hostler.objects
+                .select_for_update()
+                .get(user=hostler_user)
+            )
+
+        except Hostler.DoesNotExist:
+
+            hostler_profile = None
+
+        # 5. CHECK PENDING PAYMENTS
+
+        pending_transaction_amount = (
+            Decimal("0.00")
+        )
+
+        unpaid_mess_amount = (
+            Decimal("0.00")
+        )
+
+        if hostler_profile:
+
+            pending_transaction_amount = (
+
+                Transaction.objects.filter(
+
+                    hostler=hostler_profile,
+
+                    status__in=[
+                        "pending",
+                        "overdue",
+                        "partial"
+                    ]
+
+                ).aggregate(
+
+                    total=Sum(
+                        "remaining_amount"
+                    )
+
+                )["total"]
+
+                or Decimal("0.00")
+            )
+
+            unpaid_mess_amount = (
+
+                MessCharge.objects.filter(
+
+                    hostler=hostler_profile,
+
+                    is_paid=False
+
+                ).aggregate(
+
+                    total=Sum("amount")
+
+                )["total"]
+
+                or Decimal("0.00")
+            )
+
+        total_pending_amount = (
+            pending_transaction_amount +
+            unpaid_mess_amount
+        )
+
+        # 6. BLOCK CHECKOUT IF PENDING
+
+        if total_pending_amount > 0:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Checkout blocked due to pending payments",
+
+                "pending_amount":
+                    float(total_pending_amount),
+
+                "transaction_pending":
+                    float(
+                        pending_transaction_amount
+                    ),
+
+                "mess_pending":
+                    float(
+                        unpaid_mess_amount
+                    )
+
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 7. ROOM RELEASE
+
+        room = (
+            hostler_profile.room
+            if hostler_profile else None
+        )
+
+        if room:
+
+            room.is_available = True
+
+            room.save()
+
+        # 8. BLACKLIST ENTRY
+
+        BlacklistedHostler.objects.update_or_create(
+
+            owner=owner,
+
+            hostler=hostler_user,
+
+            defaults={
+
+                "room":
+                    room,
+
+                "reason":
+                    data["reason"]
+            }
+        )
+
+        # 9. UPDATE HOSTLER PROFILE
+
+        if hostler_profile:
+
+            hostler_profile.room = None
+
+            hostler_profile.is_active = False
+
+            hostler_profile.check_out_date = (
+                timezone.now().date()
+            )
+
+            hostler_profile.save()
+
+        # 10. UPDATE USER
+
+        hostler_user.owner = None
+
+        hostler_user.role = "user"
+
+        hostler_user.save()
+
+        # 11. SEND THANK YOU EMAIL
+
+        try:
+
+            send_mail(
+
+                subject=(
+                    "Thank You for Staying with StayEase"
+                ),
+
+                message=f"""
+Hello {hostler_user.username},
+
+Thank you for staying with us.
+
+Your checkout has been completed successfully.
+
+We truly appreciate your time at the hostel and hope you had a safe and comfortable stay.
+
+If you have any questions or future accommodation needs, feel free to contact us again.
+
+We wish you success and happiness ahead.
+
+Warm regards,
+StayEase Team
+""",
+
+                from_email=(
+                    settings.EMAIL_HOST_USER
+                ),
+
+                recipient_list=[
+                    hostler_user.email
+                ],
+
+                fail_silently=True,
+            )
+
+        except Exception as e:
+
+            print("EMAIL ERROR:", e)
+
+        # 12. SUCCESS RESPONSE
+
+        return Response({
+
+            "success": True,
+
+            "message":
+                "Hostler checked out successfully",
+
+            "hostler": {
+
+                "id":
+                    hostler_user.id,
+
+                "username":
+                    hostler_user.username,
+
+                "email":
+                    hostler_user.email,
+
+                "new_role":
+                    hostler_user.role
+            },
+
+            "blacklisted":
+                True
+
+        }, status=status.HTTP_200_OK)
+    
+class CollectPaymentView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        serializer = CollectPaymentSerializer(
+            data=request.data
+        )
+
+        if not serializer.is_valid():
+
+            return Response({
+
+                "success": False,
+
+                "errors":
+                    serializer.errors
+
+            }, status=400)
+
+        data = serializer.validated_data
+
+        # GET TRANSACTION
+
+        try:
+
+            transaction = Transaction.objects.get(
+
+                id=data["transaction_id"],
+
+                owner=request.user
+            )
+
+        except Transaction.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Transaction not found"
+
+            }, status=404)
+
+        # SAFE DECIMAL
+
+        amount = Decimal(
+            str(data["amount"])
+        )
+
+        transaction_remaining = Decimal(
+            str(transaction.remaining_amount)
+        )
+
+        # VALIDATION
+
+        if amount <= 0:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Invalid payment amount"
+
+            }, status=400)
+
+        # EXTRA PAYMENT
+        # FOR MESS CHARGES
+
+        extra_payment = (
+            amount -
+            transaction_remaining
+        )
+
+        # UPDATE TRANSACTION
+
+        if amount >= transaction_remaining:
+
+            transaction.paid_amount = (
+
+                Decimal(
+                    str(transaction.paid_amount)
+                )
+
+                +
+
+                transaction_remaining
+            )
+
+            transaction.remaining_amount = (
+                Decimal("0.00")
+            )
+
+            transaction.status = "paid"
+
+        else:
+
+            transaction.paid_amount = (
+
+                Decimal(
+                    str(transaction.paid_amount)
+                )
+
+                +
+
+                amount
+            )
+
+            transaction.remaining_amount = (
+
+                transaction_remaining -
+                amount
+            )
+
+            transaction.status = "partial"
+
+        # PAYMENT DETAILS
+
+        transaction.payment_method = (
+            data["payment_method"]
+        )
+
+        transaction.payment_note = (
+            data.get("payment_note", "")
+        )
+
+        transaction.collected_by = (
+            request.user
+        )
+
+        transaction.payment_date = (
+            timezone.now()
+        )
+
+        transaction.save()
+
+        # HANDLE MESS PAYMENT
+
+        if extra_payment > 0:
+
+            unpaid_mess_charges = (
+
+                MessCharge.objects.filter(
+
+                    hostler=transaction.hostler,
+
+                    is_paid=False
+
+                ).order_by("id")
+            )
+
+            for mess in unpaid_mess_charges:
+
+                if extra_payment <= 0:
+                    break
+
+                mess_amount = Decimal(
+                    str(mess.amount)
+                )
+
+                if extra_payment >= mess_amount:
+
+                    mess.is_paid = True
+
+                    mess.save()
+
+                    extra_payment -= (
+                        mess_amount
+                    )
+
+        # REMAINING MESS
+
+        remaining_mess = (
+
+            MessCharge.objects.filter(
+
+                hostler=transaction.hostler,
+
+                is_paid=False
+
+            ).aggregate(
+
+                total=Sum("amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # RESPONSE
+
+        return Response({
+
+            "success": True,
+
+            "message":
+                "Payment collected successfully",
+
+            "transaction": {
+
+                "id":
+                    transaction.id,
+
+                "total_amount":
+                    float(transaction.amount),
+
+                "paid_amount":
+                    float(transaction.paid_amount),
+
+                "remaining_amount":
+                    float(
+                        transaction.remaining_amount
+                    ),
+
+                "status":
+                    transaction.status,
+
+                "payment_method":
+                    transaction.payment_method
+            },
+
+            "remaining_mess_pending":
+                float(remaining_mess)
+
+        }, status=status.HTTP_200_OK)

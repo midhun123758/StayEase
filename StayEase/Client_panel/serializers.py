@@ -10,7 +10,7 @@ class HostelSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     class Meta:
         model = Hostel
-        fields = ['id','owner', 'name', 'latitude', 'longitude', 'city', 'state', 'description', 'rooms_available']
+        fields = ['id','owner', 'name', 'latitude', 'longitude', 'city', 'state', 'description', 'rooms_available','mess_service','contact_number','image1','image2','image3','image4']
         read_only_fields = ['id']
 
 

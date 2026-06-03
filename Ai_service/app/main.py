@@ -185,7 +185,7 @@ async def ask(question: str):
 
         reply = client.models.generate_content(
 
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-3.1-flash-lite",
 
             contents=(
 

@@ -1,4 +1,6 @@
 
+from decimal import Decimal
+
 from django.utils import timezone
 from rest_framework import serializers
 from .models import AssignedMeal, Hostel, HostelFeedback,Hostler, MealTemplate, MessCharge,Room, Room_image, Subscription_Amount, Transaction
@@ -294,8 +296,50 @@ class CollectPaymentSerializer(serializers.Serializer):
             "bank"
         ]
     )
-
     payment_note = serializers.CharField(
         required=False,
         allow_blank=True
+    )
+
+class CheckoutSettlementSerializer(
+
+    serializers.Serializer
+):
+
+    PAYMENT_METHODS = [
+
+        ("cash", "Cash"),
+
+        ("gpay", "Google Pay"),
+
+        ("phonepe", "PhonePe"),
+
+        ("paytm", "Paytm"),
+
+        ("bank", "Bank Transfer"),
+    ]
+
+    settlement_id = serializers.IntegerField()
+
+    amount = serializers.DecimalField(
+
+        max_digits=10,
+
+        decimal_places=2,
+
+        min_value=Decimal("0.01")
+    )
+
+    payment_method = serializers.ChoiceField(
+
+        choices=PAYMENT_METHODS
+    )
+
+    payment_note = serializers.CharField(
+
+        required=False,
+
+        allow_blank=True,
+
+        max_length=255
     )

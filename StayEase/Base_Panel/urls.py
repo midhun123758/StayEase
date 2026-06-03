@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import AddHostlerView, AddRoomView, CollectPaymentView, CreateSubscriptionOrderView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView,Edit_hostel, FinancialOverviewView, GenerateUploadURL, HostelFeedbackCreateView, HostelFeedbackListView, HostelListView,AddDocument, HostlerCheckoutView, MealResponsesView, Room_listView, RoomImagesListView, SubscriptionDetailView, VerifySubscriptionPaymentView,my_hostlers,OwnerChatListView,Meal_assignmentView,Owner_Profile,OwnerReplyFeedbackView
+from .views import AddHostlerView, AddRoomView, CheckoutSettlementPaymentView, CollectPaymentView, CreateSubscriptionOrderView, DailyMealAssignmentView, Enquery_change_view, EnquiryListView,Edit_hostel, FinancialOverviewView, FinancialReportView, GenerateUploadURL, HostelFeedbackCreateView, HostelFeedbackListView, HostelListView,AddDocument, HostlerCheckoutView, MealResponsesView, Room_listView, RoomImagesListView, SubscriptionDetailView, VerifySubscriptionPaymentView,my_hostlers,OwnerChatListView,Meal_assignmentView,Owner_Profile,OwnerReplyFeedbackView
 urlpatterns = [
     path('add_hostel/', HostelListView.as_view(), name='add_hostel'),
     path("generate-upload-url/", GenerateUploadURL.as_view()),
@@ -27,4 +27,6 @@ urlpatterns = [
     path("feedback/<int:feedback_id>/reply/",OwnerReplyFeedbackView.as_view()),
     path("hostels/checkout_view/",HostlerCheckoutView.as_view()),
     path("collect-payment/",CollectPaymentView.as_view(),name="collect_payment"),
+    path("checkout-settlement-payment/",CheckoutSettlementPaymentView.as_view(),name="checkout_settlement_payment"),
+    path("totel_financial/",FinancialReportView.as_view(),name="totel_financial")
     ]

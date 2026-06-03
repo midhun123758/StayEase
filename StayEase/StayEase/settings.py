@@ -55,10 +55,16 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'Hostlers_panel.apps.HostlerPanelConfig',
     'rest_framework_simplejwt.token_blacklist',
-    'Admin_panel'
+    'Admin_panel',
+    'drf_spectacular'
 
 ]
 RABBITMQ_HOST = "rabbitmq"
+
+
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+}
 # ─── Middleware ───────────────────────────────────────────────────────────────
 #
 
@@ -85,7 +91,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -147,7 +153,9 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 SIMPLE_JWT = {
@@ -238,7 +246,9 @@ USE_I18N      = True
 USE_TZ        = True
 
 # ─── Static files ────────────────────────────────────────────────────────────
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 import os

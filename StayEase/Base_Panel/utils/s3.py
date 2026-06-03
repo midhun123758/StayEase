@@ -41,3 +41,36 @@ def send_live_notification(user_id, notification_type, message, data=None):
             "data": data or {},
         }
     )
+
+from decimal import Decimal
+
+def calculate_stay_payment(
+    monthly_rent,
+    check_in_date,
+    check_out_date
+):
+
+    days_stayed = (
+        check_out_date - check_in_date
+    ).days + 1
+
+    daily_rent = (
+        Decimal(str(monthly_rent))
+        / Decimal("30")
+    )
+
+    total_amount = (
+        daily_rent * days_stayed
+    )
+
+    return {
+
+        "days_stayed":
+            days_stayed,
+
+        "daily_rent":
+            round(daily_rent, 2),
+
+        "total_amount":
+            round(total_amount, 2)
+    }

@@ -1,14 +1,16 @@
 
+from calendar import monthrange
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.shortcuts import render
 from rest_framework import status
 from App.models import User
 from Hostlers_panel.models import MealResponse
-from .models import AssignedMeal, BlacklistedHostler, ChatRoom, Hostel, HostelDocument, HostelFeedback, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
+from .models import AssignedMeal, BlacklistedHostler, ChatRoom, CheckoutSettlement, Hostel, HostelDocument, HostelFeedback, Hostler, MealTemplate, MessCharge, Room_image, Subscription_Amount, Transaction
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response            
-from .serilalizers import AssignedMealSerializer, CollectPaymentSerializer, EnquirySerializer, HostelFeedbackSerializer, HostelSerializer, HostlerCheckoutSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, SubscriptionAmountSerializer, UserSerializer
+from .serilalizers import AssignedMealSerializer, CheckoutSettlementSerializer, CollectPaymentSerializer, EnquirySerializer, HostelFeedbackSerializer, HostelSerializer, HostlerCheckoutSerializer, HostlerCreateSerializer, HostlerSerializer, RoomImageSerializer, SubscriptionAmountSerializer, UserSerializer
 from rest_framework.permissions import IsAuthenticated
 from .utils.s3 import generate_presigned_url
 from .models import Room
@@ -21,7 +23,7 @@ from .models import OwnerSubscription
 import razorpay
 from django.conf import settings
 from Client_panel.utils import send_client_notification
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.core.mail import send_mail
@@ -1197,6 +1199,7 @@ class HostelFeedbackListView(APIView):
             "reviews": serializer.data
 
         })
+    
 class HostlerCheckoutView(APIView):
 
     authentication_classes = [JWTAuthentication]
@@ -1208,7 +1211,7 @@ class HostlerCheckoutView(APIView):
 
         owner = request.user
 
-        # 1. PERMISSION CHECK
+        # 1. OWNER CHECK
 
         if owner.role != "owner":
 
@@ -1221,7 +1224,7 @@ class HostlerCheckoutView(APIView):
 
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. VALIDATE INPUT
+        # 2. VALIDATE REQUEST
 
         serializer = HostlerCheckoutSerializer(
             data=request.data
@@ -1285,97 +1288,257 @@ class HostlerCheckoutView(APIView):
 
         except Hostler.DoesNotExist:
 
-            hostler_profile = None
+            return Response({
 
-        # 5. CHECK PENDING PAYMENTS
+                "success": False,
 
-        pending_transaction_amount = (
-            Decimal("0.00")
+                "message":
+                    "Hostler profile not found"
+
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 5. CHECK-IN DATE
+
+        checkin_date = (
+            hostler_profile.check_in_date
         )
 
-        unpaid_mess_amount = (
-            Decimal("0.00")
+        checkout_date = (
+            timezone.now().date()
         )
 
-        if hostler_profile:
+        # 6. STAYED DAYS
 
-            pending_transaction_amount = (
+        stayed_days = (
 
-                Transaction.objects.filter(
+            checkout_date -
 
-                    hostler=hostler_profile,
+            checkin_date
 
-                    status__in=[
-                        "pending",
-                        "overdue",
-                        "partial"
-                    ]
+        ).days + 1
 
-                ).aggregate(
-
-                    total=Sum(
-                        "remaining_amount"
-                    )
-
-                )["total"]
-
-                or Decimal("0.00")
-            )
-
-            unpaid_mess_amount = (
-
-                MessCharge.objects.filter(
-
-                    hostler=hostler_profile,
-
-                    is_paid=False
-
-                ).aggregate(
-
-                    total=Sum("amount")
-
-                )["total"]
-
-                or Decimal("0.00")
-            )
-
-        total_pending_amount = (
-            pending_transaction_amount +
-            unpaid_mess_amount
-        )
-
-        # 6. BLOCK CHECKOUT IF PENDING
-
-        if total_pending_amount > 0:
+        if stayed_days <= 0:
 
             return Response({
 
                 "success": False,
 
                 "message":
-                    "Checkout blocked due to pending payments",
-
-                "pending_amount":
-                    float(total_pending_amount),
-
-                "transaction_pending":
-                    float(
-                        pending_transaction_amount
-                    ),
-
-                "mess_pending":
-                    float(
-                        unpaid_mess_amount
-                    )
+                    "Invalid stayed days"
 
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 7. ROOM RELEASE
+        # 7. MONTH DAYS
 
-        room = (
-            hostler_profile.room
-            if hostler_profile else None
+        month_days = monthrange(
+
+            checkout_date.year,
+
+            checkout_date.month
+
+        )[1]
+
+        # 8. MONTHLY RENT
+
+        monthly_rent = Decimal(
+            str(
+                hostler_profile.monthly_rent
+            )
         )
+
+        # 9. DAILY RENT
+
+        daily_rent = (
+
+            monthly_rent /
+
+            Decimal(str(month_days))
+
+        ).quantize(
+            Decimal("0.01")
+        )
+
+        # 10. ACTUAL RENT DUE
+
+        actual_rent_due = (
+
+            daily_rent *
+
+            Decimal(str(stayed_days))
+
+        ).quantize(
+            Decimal("0.01")
+        )
+
+        # 11. TOTAL RENT PAID
+
+        total_rent_paid = (
+
+            Transaction.objects.filter(
+
+                hostler=hostler_profile
+
+            ).aggregate(
+
+                total=Sum(
+                    "paid_amount"
+                )
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # 12. UNPAID MESS AMOUNT
+
+        unpaid_mess_amount = (
+
+            MessCharge.objects.filter(
+
+                hostler=hostler_profile,
+
+                is_paid=False
+
+            ).aggregate(
+
+                total=Sum("amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # 13. FINAL PENDING
+
+        total_pending_amount = (
+
+            actual_rent_due +
+
+            unpaid_mess_amount -
+
+            total_rent_paid
+
+        ).quantize(
+            Decimal("0.01")
+        )
+
+        # 14. REFUND CALCULATION
+
+        refund_amount = Decimal("0.00")
+
+        if total_pending_amount < 0:
+
+            refund_amount = abs(
+                total_pending_amount
+            )
+
+            total_pending_amount = Decimal(
+                "0.00"
+            )
+
+        # 15. IF PENDING EXISTS
+
+        if total_pending_amount > 0:
+
+            settlement = (
+                CheckoutSettlement.objects.create(
+
+                    hostler=hostler_profile,
+
+                    owner=owner,
+
+                    stayed_days=stayed_days,
+
+                    actual_rent_due=actual_rent_due,
+
+                    already_paid=total_rent_paid,
+
+                    mess_pending=unpaid_mess_amount,
+
+                    pending_amount=total_pending_amount,
+
+                    refund_amount=refund_amount,
+
+                    is_paid=False
+                )
+            )
+
+            return Response({
+
+                "success": True,
+
+                "payment_required": True,
+
+                "message":
+                    "Complete pending payment to finish checkout",
+
+                "settlement": {
+
+                    "settlement_id":
+                        settlement.id,
+
+                    "stayed_days":
+                        settlement.stayed_days,
+
+                    "actual_rent_due":
+                        float(
+                            settlement.actual_rent_due
+                        ),
+
+                    "already_paid":
+                        float(
+                            settlement.already_paid
+                        ),
+
+                    "mess_pending":
+                        float(
+                            settlement.mess_pending
+                        ),
+
+                    "pending_amount":
+                        float(
+                            settlement.pending_amount
+                        ),
+
+                    "refund_amount":
+                        float(
+                            settlement.refund_amount
+                        ),
+
+                    "is_paid":
+                        settlement.is_paid
+                }
+
+            }, status=200)
+
+        # 16. SAVE CHECKOUT SETTLEMENT
+
+        settlement = (
+            CheckoutSettlement.objects.create(
+
+                hostler=hostler_profile,
+
+                owner=owner,
+
+                stayed_days=stayed_days,
+
+                actual_rent_due=actual_rent_due,
+
+                already_paid=total_rent_paid,
+
+                mess_pending=unpaid_mess_amount,
+
+                pending_amount=Decimal("0.00"),
+
+                refund_amount=refund_amount,
+
+                is_paid=True
+            )
+        )
+
+        # 17. RELEASE ROOM
+
+        room = hostler_profile.room
 
         if room:
 
@@ -1383,7 +1546,7 @@ class HostlerCheckoutView(APIView):
 
             room.save()
 
-        # 8. BLACKLIST ENTRY
+        # 18. BLACKLIST ENTRY
 
         BlacklistedHostler.objects.update_or_create(
 
@@ -1401,21 +1564,19 @@ class HostlerCheckoutView(APIView):
             }
         )
 
-        # 9. UPDATE HOSTLER PROFILE
+        # 19. UPDATE HOSTLER PROFILE
 
-        if hostler_profile:
+        hostler_profile.room = None
 
-            hostler_profile.room = None
+        hostler_profile.is_active = False
 
-            hostler_profile.is_active = False
+        hostler_profile.check_out_date = (
+            timezone.now().date()
+        )
 
-            hostler_profile.check_out_date = (
-                timezone.now().date()
-            )
+        hostler_profile.save()
 
-            hostler_profile.save()
-
-        # 10. UPDATE USER
+        # 20. UPDATE USER
 
         hostler_user.owner = None
 
@@ -1423,7 +1584,7 @@ class HostlerCheckoutView(APIView):
 
         hostler_user.save()
 
-        # 11. SEND THANK YOU EMAIL
+        # 21. SEND THANK YOU EMAIL
 
         try:
 
@@ -1465,7 +1626,7 @@ StayEase Team
 
             print("EMAIL ERROR:", e)
 
-        # 12. SUCCESS RESPONSE
+        # 22. SUCCESS RESPONSE
 
         return Response({
 
@@ -1473,6 +1634,43 @@ StayEase Team
 
             "message":
                 "Hostler checked out successfully",
+
+            "settlement": {
+
+                "settlement_id":
+                    settlement.id,
+
+                "stayed_days":
+                    settlement.stayed_days,
+
+                "actual_rent_due":
+                    float(
+                        settlement.actual_rent_due
+                    ),
+
+                "already_paid":
+                    float(
+                        settlement.already_paid
+                    ),
+
+                "mess_pending":
+                    float(
+                        settlement.mess_pending
+                    ),
+
+                "pending_amount":
+                    float(
+                        settlement.pending_amount
+                    ),
+
+                "refund_amount":
+                    float(
+                        settlement.refund_amount
+                    ),
+
+                "is_paid":
+                    settlement.is_paid
+            },
 
             "hostler": {
 
@@ -1709,10 +1907,8 @@ class CollectPaymentView(APIView):
                     float(
                         transaction.remaining_amount
                     ),
-
                 "status":
                     transaction.status,
-
                 "payment_method":
                     transaction.payment_method
             },
@@ -1721,3 +1917,1120 @@ class CollectPaymentView(APIView):
                 float(remaining_mess)
 
         }, status=status.HTTP_200_OK)
+
+# class CollectPaymentView(APIView):
+
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request):
+
+#         serializer = CollectPaymentSerializer(
+#             data=request.data
+#         )
+
+#         if not serializer.is_valid():
+
+#             return Response({
+
+#                 "success": False,
+
+#                 "errors":
+#                     serializer.errors
+
+#             }, status=400)
+
+#         data = serializer.validated_data
+
+#         # =====================================================
+#         # GET TRANSACTION
+#         # =====================================================
+
+#         try:
+
+#             transaction = Transaction.objects.get(
+
+#                 id=data["transaction_id"],
+
+#                 owner=request.user
+#             )
+
+#         except Transaction.DoesNotExist:
+
+#             return Response({
+
+#                 "success": False,
+
+#                 "message":
+#                     "Transaction not found"
+
+#             }, status=404)
+
+#         # =====================================================
+#         # SAFE DECIMAL
+#         # =====================================================
+
+#         amount = Decimal(
+#             str(data["amount"])
+#         )
+
+#         transaction_remaining = Decimal(
+#             str(transaction.remaining_amount)
+#         )
+
+#         current_paid = Decimal(
+#             str(transaction.paid_amount)
+#         )
+
+#         # =====================================================
+#         # VALIDATION
+#         # =====================================================
+
+#         if amount <= 0:
+
+#             return Response({
+
+#                 "success": False,
+
+#                 "message":
+#                     "Invalid payment amount"
+
+#             }, status=400)
+
+#         # =====================================================
+#         # DYNAMIC DAY CALCULATION
+#         # ONLY IF CHECKED OUT
+#         # =====================================================
+
+#         days_stayed = 0
+
+#         daily_rent = Decimal("0.00")
+
+#         monthly_rent = Decimal(
+
+#             str(
+#                 transaction.hostler.room.price
+#             )
+#         )
+
+#         if transaction.check_out_date:
+
+#             check_in_date = (
+#                 transaction.hostler.check_in_date
+#             )
+
+#             checkout_date = (
+#                 transaction.check_out_date
+#             )
+
+#             days_stayed = (
+
+#                 checkout_date -
+
+#                 check_in_date
+
+#             ).days + 1
+
+#             if days_stayed <= 0:
+
+#                 days_stayed = 1
+
+#             # DAILY RENT
+
+#             daily_rent = (
+
+#                 monthly_rent /
+
+#                 Decimal("30")
+#             )
+
+#             # FINAL AMOUNT
+
+#             calculated_total = (
+
+#                 daily_rent *
+
+#                 Decimal(str(days_stayed))
+#             )
+
+#             calculated_total = (
+#                 calculated_total.quantize(
+#                     Decimal("0.01")
+#                 )
+#             )
+
+#             transaction.amount = (
+#                 calculated_total
+#             )
+
+#             transaction_remaining = (
+
+#                 calculated_total -
+
+#                 current_paid
+#             )
+
+#             transaction.remaining_amount = (
+#                 transaction_remaining
+#             )
+
+#         # =====================================================
+#         # EXTRA PAYMENT
+#         # =====================================================
+
+#         extra_payment = Decimal("0.00")
+
+#         if amount > transaction_remaining:
+
+#             extra_payment = (
+
+#                 amount -
+
+#                 transaction_remaining
+#             )
+
+#         # =====================================================
+#         # UPDATE PAYMENT
+#         # =====================================================
+
+#         if amount >= transaction_remaining:
+
+#             transaction.paid_amount = (
+
+#                 current_paid +
+
+#                 transaction_remaining
+#             )
+
+#         else:
+
+#             transaction.paid_amount = (
+
+#                 current_paid +
+
+#                 amount
+#             )
+
+#         # =====================================================
+#         # REMAINING
+#         # =====================================================
+
+#         transaction.remaining_amount = (
+
+#             transaction.amount -
+
+#             transaction.paid_amount
+#         )
+
+#         # =====================================================
+#         # STATUS
+#         # =====================================================
+
+#         if transaction.remaining_amount <= 0:
+
+#             transaction.remaining_amount = (
+#                 Decimal("0.00")
+#             )
+
+#             transaction.status = "paid"
+
+#         else:
+
+#             transaction.status = "partial"
+
+#         # =====================================================
+#         # PAYMENT DETAILS
+#         # =====================================================
+
+#         transaction.payment_method = (
+#             data["payment_method"]
+#         )
+
+#         transaction.payment_note = (
+#             data.get("payment_note", "")
+#         )
+
+#         transaction.collected_by = (
+#             request.user
+#         )
+
+#         transaction.payment_date = (
+#             timezone.now()
+#         )
+
+#         transaction.save()
+
+#         # =====================================================
+#         # HANDLE EXTRA PAYMENT
+#         # =====================================================
+
+#         if extra_payment > 0:
+
+#             unpaid_mess_charges = (
+
+#                 MessCharge.objects.filter(
+
+#                     hostler=transaction.hostler,
+
+#                     is_paid=False
+
+#                 ).order_by("created_at")
+#             )
+
+#             for mess in unpaid_mess_charges:
+
+#                 if extra_payment <= 0:
+
+#                     break
+
+#                 mess_amount = Decimal(
+#                     str(mess.amount)
+#                 )
+
+#                 if extra_payment >= mess_amount:
+
+#                     mess.is_paid = True
+
+#                     mess.save()
+
+#                     extra_payment -= (
+#                         mess_amount
+#                     )
+
+#         # =====================================================
+#         # REMAINING MESS
+#         # =====================================================
+
+#         remaining_mess = (
+
+#             MessCharge.objects.filter(
+
+#                 hostler=transaction.hostler,
+
+#                 is_paid=False
+
+#             ).aggregate(
+
+#                 total=Sum("amount")
+
+#             )["total"]
+
+#             or Decimal("0.00")
+#         )
+
+#         # =====================================================
+#         # RESPONSE
+#         # =====================================================
+
+#         return Response({
+
+#             "success": True,
+
+#             "message":
+#                 "Payment collected successfully",
+
+#             "transaction": {
+
+#                 "id":
+#                     transaction.id,
+
+#                 "monthly_rent":
+#                     float(monthly_rent),
+
+#                 "days_stayed":
+#                     days_stayed,
+
+#                 "daily_rent":
+#                     float(daily_rent),
+
+#                 "total_amount":
+#                     float(transaction.amount),
+
+#                 "paid_amount":
+#                     float(transaction.paid_amount),
+
+#                 "remaining_amount":
+#                     float(
+#                         transaction.remaining_amount
+#                     ),
+
+#                 "status":
+#                     transaction.status,
+
+#                 "payment_method":
+#                     transaction.payment_method
+#             },
+
+#             "remaining_mess_pending":
+#                 float(remaining_mess)
+
+#         }, status=status.HTTP_200_OK)
+class CheckoutSettlementPaymentView(
+    APIView
+):
+
+    permission_classes = [
+        IsAuthenticated
+    ]
+
+    @transaction.atomic
+    def post(self, request):
+
+        serializer = (
+            CheckoutSettlementSerializer(
+
+                data=request.data
+            )
+        )
+
+        if not serializer.is_valid():
+
+            return Response({
+
+                "success": False,
+
+                "errors":
+                    serializer.errors
+
+            }, status=400)
+
+        data = serializer.validated_data
+
+        # GET SETTLEMENT
+
+        try:
+
+            settlement = (
+
+                CheckoutSettlement.objects
+                .select_for_update()
+                .get(
+
+                    id=data["settlement_id"],
+
+                    owner=request.user
+                )
+            )
+
+        except CheckoutSettlement.DoesNotExist:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Settlement not found"
+
+            }, status=404)
+
+        # ALREADY COMPLETED
+
+        if settlement.is_paid:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Settlement already completed"
+
+            }, status=400)
+
+        # PAYMENT DATA
+
+        amount = Decimal(
+            str(data["amount"])
+        )
+
+        payment_method = data[
+            "payment_method"
+        ]
+
+        payment_note = data.get(
+            "payment_note",
+            ""
+        )
+
+        # INVALID AMOUNT
+
+        if amount <= 0:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Invalid payment amount"
+
+            }, status=400)
+
+        # PAYMENT MUST MATCH
+        # FULL PENDING AMOUNT
+
+        if amount != settlement.pending_amount:
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Full pending settlement amount required",
+
+                "pending_amount":
+                    float(
+                        settlement.pending_amount
+                    )
+
+            }, status=400)
+
+        # COMPLETE SETTLEMENT
+
+        settlement.pending_amount = Decimal(
+            "0.00"
+        )
+
+        settlement.is_paid = True
+
+        settlement.payment_method = (
+            payment_method
+        )
+
+        settlement.payment_note = (
+            payment_note
+        )
+
+        settlement.save()
+
+        # HOSTLER PROFILE
+
+        hostler_profile = (
+            settlement.hostler
+        )
+
+        # HOSTLER USER
+
+        hostler_user = (
+            hostler_profile.user
+        )
+
+        # ROOM
+
+        room = (
+            hostler_profile.room
+        )
+
+        # MARK ALL TRANSACTIONS PAID
+
+        Transaction.objects.filter(
+
+            hostler=hostler_profile
+
+        ).update(
+
+            status="paid"
+        )
+
+        # MARK ALL MESS PAID
+
+        MessCharge.objects.filter(
+
+            hostler=hostler_profile,
+
+            is_paid=False
+
+        ).update(
+
+            is_paid=True
+        )
+
+        # RELEASE ROOM
+
+        if room:
+
+            room.is_available = True
+
+            room.save()
+
+        # UPDATE HOSTLER PROFILE
+
+        hostler_profile.room = None
+
+        hostler_profile.is_active = False
+
+        hostler_profile.check_out_date = (
+            timezone.now().date()
+        )
+
+        hostler_profile.save()
+
+        # UPDATE USER ROLE
+
+        hostler_user.owner = None
+
+        hostler_user.role = "user"
+
+        hostler_user.save()
+
+        return Response({
+
+            "success": True,
+
+            "message":
+                "Settlement payment completed successfully",
+
+            "payment": {
+
+                "settlement_id":
+                    settlement.id,
+
+                "amount_paid":
+                    float(amount),
+
+                "payment_method":
+                    settlement.payment_method,
+
+                "payment_note":
+                    settlement.payment_note,
+
+                "is_paid":
+                    settlement.is_paid
+            },
+
+            "hostler": {
+
+                "id":
+                    hostler_user.id,
+
+                "username":
+                    hostler_user.username,
+
+                "email":
+                    hostler_user.email,
+
+                "new_role":
+                    hostler_user.role
+            }
+
+        }, status=200)
+
+class FinancialReportView(APIView):
+
+    authentication_classes = [JWTAuthentication]
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        owner = request.user
+
+        if owner.role != "owner":
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Only owners can access financial reports"
+
+            }, status=403)
+
+        # TOTAL RENT COLLECTED
+
+        total_rent_collected = (
+
+            Transaction.objects.filter(
+
+                owner=owner,
+
+                status="paid"
+
+            ).aggregate(
+
+                total=Sum("paid_amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # TOTAL PENDING
+
+        total_pending = (
+
+            Transaction.objects.filter(
+
+                owner=owner
+
+            ).exclude(
+
+                status="paid"
+
+            ).aggregate(
+
+                total=Sum("remaining_amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # TOTAL MESS COLLECTED
+
+        total_mess_collected = (
+
+            MessCharge.objects.filter(
+
+                hostler__owner=owner,
+
+                is_paid=True
+
+            ).aggregate(
+
+                total=Sum("amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # TOTAL MESS PENDING
+
+        total_mess_pending = (
+
+            MessCharge.objects.filter(
+
+                hostler__owner=owner,
+
+                is_paid=False
+
+            ).aggregate(
+
+                total=Sum("amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # TOTAL HOSTLERS
+
+        total_hostlers = (
+
+            Hostler.objects.filter(
+
+                owner=owner,
+
+                is_active=True
+
+            ).count()
+        )
+
+        # TOTAL CHECKOUTS
+
+        total_checkouts = (
+
+            CheckoutSettlement.objects.filter(
+
+                owner=owner
+
+            ).count()
+        )
+
+        # TOTAL REFUNDS
+
+        total_refunds = (
+
+            CheckoutSettlement.objects.filter(
+
+                owner=owner
+
+            ).aggregate(
+
+                total=Sum("refund_amount")
+
+            )["total"]
+
+            or Decimal("0.00")
+        )
+
+        # TOTAL INCOME
+
+        total_income = (
+
+            total_rent_collected +
+
+            total_mess_collected -
+
+            total_refunds
+        )
+
+        return Response({
+
+            "success": True,
+
+            "financial_report": {
+
+                "total_income":
+                    float(total_income),
+
+                "rent_collected":
+                    float(total_rent_collected),
+
+                "rent_pending":
+                    float(total_pending),
+
+                "mess_collected":
+                    float(total_mess_collected),
+
+                "mess_pending":
+                    float(total_mess_pending),
+
+                "total_refunds":
+                    float(total_refunds),
+
+                "active_hostlers":
+                    total_hostlers,
+
+                "total_checkouts":
+                    total_checkouts
+            }
+
+        }, status=200)
+class FinancialReportView(APIView):
+
+    authentication_classes = [
+        JWTAuthentication
+    ]
+
+    permission_classes = [
+        IsAuthenticated
+    ]
+
+    def get(self, request):
+
+        owner = request.user
+
+        # OWNER CHECK
+
+        if owner.role != "owner":
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Only owners can access financial reports"
+
+            }, status=403)
+
+        # MONTH & YEAR
+
+        now = datetime.now()
+
+        try:
+
+            month = int(
+
+                request.query_params.get(
+                    "month",
+                    now.month
+                )
+            )
+
+            year = int(
+
+                request.query_params.get(
+                    "year",
+                    now.year
+                )
+            )
+
+            if not (1 <= month <= 12):
+
+                raise ValueError
+
+        except (ValueError, TypeError):
+
+            return Response({
+
+                "success": False,
+
+                "message":
+                    "Invalid month or year"
+
+            }, status=400)
+
+        # RENT COLLECTED
+
+        rent_collected = (
+
+            Transaction.objects.filter(
+
+                owner=owner,
+
+                status="paid",
+
+                payment_date__month=month,
+
+                payment_date__year=year
+
+            ).aggregate(
+
+                total=Coalesce(
+                    Sum("paid_amount"),
+                    Decimal("0.00")
+                )
+
+            )["total"]
+        )
+
+        # RENT PENDING
+
+        rent_pending = (
+
+            Transaction.objects.filter(
+
+                owner=owner,
+
+                due_date__month=month,
+
+                due_date__year=year
+
+            ).exclude(
+
+                status="paid"
+
+            ).aggregate(
+
+                total=Coalesce(
+                    Sum("remaining_amount"),
+                    Decimal("0.00")
+                )
+
+            )["total"]
+        )
+
+        # MESS COLLECTED
+
+        mess_collected = (
+
+            MessCharge.objects.filter(
+
+                hostler__owner=owner,
+
+                is_paid=True,
+
+                created_at__month=month,
+
+                created_at__year=year
+
+            ).aggregate(
+
+                total=Coalesce(
+                    Sum("amount"),
+                    Decimal("0.00")
+                )
+
+            )["total"]
+        )
+
+        # MESS PENDING
+
+        mess_pending = (
+
+            MessCharge.objects.filter(
+
+                hostler__owner=owner,
+
+                is_paid=False,
+
+                created_at__month=month,
+
+                created_at__year=year
+
+            ).aggregate(
+
+                total=Coalesce(
+                    Sum("amount"),
+                    Decimal("0.00")
+                )
+
+            )["total"]
+        )
+
+        # TOTAL REFUNDS
+
+        total_refunds = (
+
+            CheckoutSettlement.objects.filter(
+
+                owner=owner,
+
+                created_at__month=month,
+
+                created_at__year=year
+
+            ).aggregate(
+
+                total=Coalesce(
+                    Sum("refund_amount"),
+                    Decimal("0.00")
+                )
+
+            )["total"]
+        )
+
+        # ACTIVE HOSTLERS
+
+        active_hostlers = (
+
+            Hostler.objects.filter(
+
+                owner=owner,
+
+                is_active=True
+
+            ).count()
+        )
+
+        # TOTAL CHECKOUTS
+
+        total_checkouts = (
+
+            CheckoutSettlement.objects.filter(
+
+                owner=owner,
+
+                created_at__month=month,
+
+                created_at__year=year
+
+            ).count()
+        )
+
+        # TOTAL TRANSACTIONS
+
+        total_transactions = (
+
+            Transaction.objects.filter(
+
+                owner=owner,
+
+                billing_date__month=month,
+
+                billing_date__year=year
+
+            ).count()
+        )
+
+        # NET INCOME
+
+        total_income = (
+
+            rent_collected +
+
+            mess_collected -
+
+            total_refunds
+        )
+
+        # RECENT PAYMENTS
+
+        recent_payments = (
+
+            Transaction.objects.filter(
+
+                owner=owner,
+
+                status="paid",
+
+                payment_date__month=month,
+
+                payment_date__year=year
+
+            ).select_related(
+
+                "hostler__user"
+
+            ).order_by(
+
+                "-payment_date"
+
+            )[:10]
+        )
+
+        recent_payment_data = []
+
+        for payment in recent_payments:
+
+            recent_payment_data.append({
+
+                "hostler":
+                    payment.hostler.user.username,
+
+                "amount":
+                    float(payment.paid_amount),
+
+                "payment_type":
+                    payment.payment_type,
+
+                "payment_method":
+                    payment.payment_method,
+
+                "payment_date":
+                    payment.payment_date
+            })
+
+        return Response({
+
+            "success": True,
+
+            "report_period": {
+
+                "month":
+                    month,
+
+                "year":
+                    year,
+
+                "month_name":
+                    datetime(
+                        year,
+                        month,
+                        1
+                    ).strftime("%B")
+            },
+
+            "financial_summary": {
+
+                "total_income":
+                    float(total_income),
+
+                "rent_collected":
+                    float(rent_collected),
+
+                "rent_pending":
+                    float(rent_pending),
+
+                "mess_collected":
+                    float(mess_collected),
+
+                "mess_pending":
+                    float(mess_pending),
+
+                "total_refunds":
+                    float(total_refunds),
+
+                "active_hostlers":
+                    active_hostlers,
+
+                "total_checkouts":
+                    total_checkouts,
+
+                "total_transactions":
+                    total_transactions
+            },
+
+            "recent_payments":
+                recent_payment_data
+
+        }, status=200)

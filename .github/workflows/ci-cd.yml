@@ -45,16 +45,6 @@ jobs:
           RABBITMQ_PORT=5672
           EOF
 
-      - name: Create AI Service env
-        run: |
-          cat > Ai_service/.env << EOF
-          SECRET_KEY=${{ secrets.AI_SERVICE_SECRET_KEY }}
-          RABBITMQ_HOST=rabbitmq
-          RABBITMQ_PORT=5672
-          QDRANT_HOST=qdrant
-          QDRANT_PORT=6333
-          EOF
-
       - name: Start dependencies
         run: docker compose up -d stayease_db stayease_redis rabbitmq
 
@@ -109,29 +99,14 @@ jobs:
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:stayease-${{ github.sha }}
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:stayease-latest
 
-      - name: Build and push AI Service image
-        run: |
-          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
-
-          docker build \
-            -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }} \
-            ./Ai_service
-
-          docker tag \
-            $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }} \
-            $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:ai-latest
-
-          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:ai-${{ github.sha }}
-          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:ai-latest
-
   deploy:
-    name: Deploy
+    name: Deploy Core App
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to EC2 via SSH
+      - name: Deploy core app to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -180,9 +155,8 @@ jobs:
             echo "===== ECR LOGIN ====="
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-            echo "===== PULL IMAGES ====="
+            echo "===== PULL DJANGO IMAGE ONLY ====="
             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:stayease-latest
-            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:ai-latest
 
             echo "===== CREATE DJANGO ENV ====="
             cat > StayEase/.env << EOF
@@ -196,23 +170,14 @@ jobs:
             RABBITMQ_PORT=5672
             EOF
 
-            echo "===== CREATE AI ENV ====="
-            cat > Ai_service/.env << EOF
-            SECRET_KEY=${{ secrets.AI_SERVICE_SECRET_KEY }}
-            RABBITMQ_HOST=rabbitmq
-            RABBITMQ_PORT=5672
-            QDRANT_HOST=qdrant
-            QDRANT_PORT=6333
-            EOF
-
-            echo "===== START DEPENDENCIES ====="
-            docker-compose up -d --no-build stayease_db stayease_redis rabbitmq qdrant
+            echo "===== START CORE DEPENDENCIES ONLY ====="
+            docker-compose up -d --no-build stayease_db stayease_redis rabbitmq
 
             echo "===== MIGRATE DJANGO ONLY ====="
             docker-compose run --rm --no-deps stayease_web python manage.py migrate
 
-            echo "===== RESTART APP ====="
-            docker-compose up -d --no-build stayease_web ai_service ai_worker celery celery_beat nginx
+            echo "===== RESTART CORE APP ONLY ====="
+            docker-compose up -d --no-build stayease_web celery celery_beat
 
             echo "===== STATUS ====="
             docker ps

@@ -56,10 +56,16 @@ resource "aws_security_group" "stayease_sg" {
 }
 
 resource "aws_instance" "stayease_server" {
-  ami                    = "ami-09a9858973b288bdd"  # Ubuntu 22.04 eu-north-1
+  ami                    = "ami-09a9858973b288bdd"
   instance_type          = "t3.micro"
   key_name               = "stayease-key"
   vpc_security_group_ids = [aws_security_group.stayease_sg.id]
+
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
 
   user_data = <<-EOF
     #!/bin/bash
@@ -70,7 +76,7 @@ resource "aws_instance" "stayease_server" {
     systemctl start docker
     cd /home/ubuntu
     git clone https://github.com/midhun123758/StayEase.git
-    chown -R ubuntu:ubuntu stayease
+    chown -R ubuntu:ubuntu /home/ubuntu/StayEase
   EOF
 
   tags = {

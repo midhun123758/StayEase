@@ -1,11 +1,9 @@
 services:
 
   stayease_web:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_web
     command: daphne -b 0.0.0.0 -p 8000 StayEase.asgi:application
-    volumes:
-      - ./StayEase:/app
     ports:
       - "8000:8000"
     env_file:
@@ -53,11 +51,9 @@ services:
       - stayease_network
 
   celery:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_celery
     command: celery -A StayEase worker -l info
-    volumes:
-      - ./StayEase:/app
     env_file:
       - ./StayEase/.env
     depends_on:
@@ -68,13 +64,11 @@ services:
       - stayease_network
 
   celery_beat:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_celery_beat
     command: >
       sh -c "rm -f celerybeat-schedule &&
              celery -A StayEase beat -l info"
-    volumes:
-      - ./StayEase:/app
     env_file:
       - ./StayEase/.env
     depends_on:
@@ -104,11 +98,9 @@ services:
       - stayease_network
 
   ai_service:
-    build: ./Ai_service
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:ai-latest
     container_name: ai_service
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-    volumes:
-      - ./Ai_service:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     ports:
       - "8002:8001"
     env_file:
@@ -120,11 +112,9 @@ services:
       - stayease_network
 
   ai_worker:
-    build: ./Ai_service
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:ai-latest
     container_name: ai_worker
     command: python -m app.worker
-    volumes:
-      - ./Ai_service:/app
     env_file:
       - ./Ai_service/.env
     depends_on:

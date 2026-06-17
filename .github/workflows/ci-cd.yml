@@ -206,13 +206,13 @@ jobs:
             EOF
 
             echo "===== START DEPENDENCIES ====="
-            docker compose up -d --no-build stayease_db stayease_redis rabbitmq qdrant
+            docker-compose up -d --no-build stayease_db stayease_redis rabbitmq qdrant
 
             echo "===== MIGRATE DJANGO ONLY ====="
-            docker compose run --rm --no-deps stayease_web python manage.py migrate
+            docker-compose run --rm --no-deps stayease_web python manage.py migrate
 
             echo "===== RESTART APP ====="
-            docker compose up -d --no-build stayease_web ai_service ai_worker celery celery_beat nginx
+            docker-compose up -d --no-build stayease_web ai_service ai_worker celery celery_beat nginx
 
             echo "===== STATUS ====="
             docker ps

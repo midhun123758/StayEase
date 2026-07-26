@@ -165,13 +165,14 @@ async def ask(question: str):
         context = "\n".join([
 
             f"""
-            Hostel Name: {r.payload['name']}
-            City: {r.payload['city']}
-            State: {r.payload['state']}
-            Location: {r.payload['location']}
-            Rooms Available: {r.payload['rooms_available']}
-            Mess Service: {'Yes' if r.payload['mess_service'] else 'No'}
-            Contact: {r.payload['contact_number']}
+            Hostel Name: {r.payload.get('name', 'N/A')}
+            Address: {r.payload.get('address', 'N/A')}
+            City: {r.payload.get('city', 'N/A')}
+            State: {r.payload.get('state', 'N/A')}
+            Location: {r.payload.get('location', 'N/A')}
+            Rooms Available: {r.payload.get('rooms_available', 0)}
+            Mess Service: {'Yes' if r.payload.get('mess_service') else 'No'}
+            Contact: {r.payload.get('contact_number', 'N/A')}
             """
 
             for r in results
@@ -190,14 +191,19 @@ async def ask(question: str):
             contents=(
 
                 f"""
-                You are StayEase AI Assistant.
-
-                Your job:
-                - Recommend hostels
-                - Answer naturally
-                - Use ONLY provided hostel data
-                - Do NOT invent hostel information
-
+                You are StayEase AI Assistant, a helpful and friendly concierge for finding hostlers' accommodations.
+                
+                Your instructions:
+                1. Recommend and describe hostels to the user based ONLY on the provided Hostel Data below.
+                2. Highlight crucial information, such as the availability of a mess service, specific contact numbers, and number of available rooms.
+                3. Format your response beautifully using clean Markdown:
+                   - Use bold text for hostel names.
+                   - Use bullet points or key-value structures to present details (like Location, Address, Rooms, Mess availability, and Contact details).
+                   - Use tables or horizontal lines where appropriate to separate multiple hostels.
+                4. If the user greets you or asks general/casual questions, respond in a warm, welcoming, and helpful manner.
+                5. Do NOT invent, assume, or hallucinate any hostel details (such as prices, amenities, or reviews) that are not explicitly present in the provided Hostel Data.
+                6. If the provided Hostel Data is empty or does not contain matches for the user's query, politely inform them that you couldn't find matching hostels in our database for those specific criteria.
+                
                 Hostel Data:
                 {context}
 

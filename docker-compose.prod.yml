@@ -1,78 +1,54 @@
 services:
 
   stayease_web:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_web
     command: daphne -b 0.0.0.0 -p 8000 StayEase.asgi:application
+    restart: always
     ports:
       - "8000:8000"
     env_file:
       - ./StayEase/.env
     depends_on:
-      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
       - stayease_network
-
-  stayease_db:
-    image: postgres:15
-    container_name: stayease_db
-    environment:
-      POSTGRES_DB: ${STAYEASE_DB_NAME}
-      POSTGRES_USER: ${STAYEASE_DB_USER}
-      POSTGRES_PASSWORD: ${STAYEASE_DB_PASSWORD}
     volumes:
-      - stayease_postgres_data:/var/lib/postgresql/data/
-    networks:
-      - stayease_network
+      - stayease_static_data:/app/static
 
   stayease_redis:
     image: redis:7
     container_name: stayease_redis
+    restart: always
     ports:
       - "6379:6379"
     networks:
       - stayease_network
 
-  test:
-    build: ./StayEase
-    container_name: stayease_test
-    command: python manage.py test --noinput
-    volumes:
-      - ./StayEase:/app
-    env_file:
-      - ./StayEase/.env
-    depends_on:
-      - stayease_db
-      - stayease_redis
-      - rabbitmq
-    networks:
-      - stayease_network
-
   celery:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_celery
     command: celery -A StayEase worker -l info
+    restart: always
     env_file:
       - ./StayEase/.env
     depends_on:
-      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
       - stayease_network
 
   celery_beat:
-    build: ./StayEase
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_celery_beat
     command: >
       sh -c "rm -f celerybeat-schedule &&
              celery -A StayEase beat -l info"
+    restart: always
     env_file:
       - ./StayEase/.env
     depends_on:
-      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
@@ -81,6 +57,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
+    restart: always
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -90,6 +67,7 @@ services:
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
+    restart: always
     ports:
       - "6333:6333"
     volumes:
@@ -98,9 +76,10 @@ services:
       - stayease_network
 
   ai_service:
-    build: ./Ai_service
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:ai-latest
     container_name: ai_service
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    restart: always
     ports:
       - "8002:8001"
     env_file:
@@ -112,9 +91,10 @@ services:
       - stayease_network
 
   ai_worker:
-    build: ./Ai_service
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:ai-latest
     container_name: ai_worker
     command: python -m app.worker
+    restart: always
     env_file:
       - ./Ai_service/.env
     depends_on:
@@ -126,10 +106,12 @@ services:
   nginx:
     image: nginx:latest
     container_name: stayease_nginx
+    restart: always
     ports:
       - "80:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - stayease_static_data:/app/static
     depends_on:
       - stayease_web
       - ai_service
@@ -137,8 +119,8 @@ services:
       - stayease_network
 
 volumes:
-  stayease_postgres_data:
   qdrant_data:
+  stayease_static_data:
 
 networks:
   stayease_network:

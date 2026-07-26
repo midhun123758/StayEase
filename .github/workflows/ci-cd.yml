@@ -174,7 +174,7 @@ jobs:
             DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
             DB_USER=${{ secrets.STAYEASE_DB_USER }}
             DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
-            DB_HOST=stayease_db
+            DB_HOST=${{ secrets.AWS_RDS_ENDPOINT }}
             DB_PORT=5432
             RABBITMQ_HOST=rabbitmq
             RABBITMQ_PORT=5672
@@ -189,14 +189,16 @@ jobs:
             QDRANT_PORT=6333
             EOF
 
-            echo "===== START CORE DEPENDENCIES ONLY ====="
-            docker-compose up -d --no-build stayease_db stayease_redis rabbitmq
+            echo "===== MIGRATE DJANGO ====="
+            docker compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
 
-            echo "===== MIGRATE DJANGO ONLY ====="
-            docker-compose run --rm --no-deps stayease_web python manage.py migrate
-
-            echo "===== RESTART CORE APP ONLY ====="
-            docker-compose up -d --no-build stayease_web celery celery_beat
+            echo "===== RESTART APP ====="
+            docker compose -f docker-compose.prod.yml up -d --no-build --no-deps \
+              stayease_web \
+              ai_service \
+              celery \
+              celery_beat \
+              nginx
 
             echo "===== STATUS ====="
             docker ps

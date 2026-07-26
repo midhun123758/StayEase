@@ -18,9 +18,9 @@ def publish(event_type, payload):
             properties=pika.BasicProperties(delivery_mode=2),
         )
         conn.close()
-        print(f"✅ Event published: {event_type}")
+        print(f"[SUCCESS] Event published: {event_type}")
     except Exception as e:
-        print(f"❌ RabbitMQ error: {e}")
+        print(f"[ERROR] RabbitMQ error: {e}")
 
 @receiver(post_save, sender=Hostel)
 def on_hostel_saved(sender, instance, **kwargs):

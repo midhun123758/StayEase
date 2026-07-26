@@ -134,6 +134,8 @@ jobs:
             git clean -fd
 
             echo "===== SAFE EC2 CLEANUP ====="
+            sudo growpart /dev/nvme0n1 1 || sudo growpart /dev/xvda 1 || true
+            sudo resize2fs /dev/nvme0n1p1 || sudo resize2fs /dev/xvda1 || true
             sudo rm -rf /tmp/* || true
             sudo rm -rf /var/tmp/* || true
             sudo apt-get clean || true

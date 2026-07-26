@@ -174,7 +174,7 @@ jobs:
             DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
             DB_USER=${{ secrets.STAYEASE_DB_USER }}
             DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
-            DB_HOST=${{ secrets.AWS_RDS_ENDPOINT }}
+            DB_HOST=stayease_db
             DB_PORT=5432
             RABBITMQ_HOST=rabbitmq
             RABBITMQ_PORT=5672

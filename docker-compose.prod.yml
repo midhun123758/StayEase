@@ -1,5 +1,17 @@
 services:
 
+  stayease_db:
+    image: postgres:15
+    container_name: stayease_db
+    environment:
+      POSTGRES_DB: ${STAYEASE_DB_NAME}
+      POSTGRES_USER: ${STAYEASE_DB_USER}
+      POSTGRES_PASSWORD: ${STAYEASE_DB_PASSWORD}
+    volumes:
+      - stayease_postgres_data:/var/lib/postgresql/data/
+    networks:
+      - stayease_network
+
   stayease_web:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:stayease-latest
     container_name: stayease_web
@@ -10,6 +22,7 @@ services:
     env_file:
       - ./StayEase/.env
     depends_on:
+      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
@@ -34,6 +47,7 @@ services:
     env_file:
       - ./StayEase/.env
     depends_on:
+      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
@@ -49,6 +63,7 @@ services:
     env_file:
       - ./StayEase/.env
     depends_on:
+      - stayease_db
       - stayease_redis
       - rabbitmq
     networks:
@@ -119,6 +134,7 @@ services:
       - stayease_network
 
 volumes:
+  stayease_postgres_data:
   qdrant_data:
   stayease_static_data:
 

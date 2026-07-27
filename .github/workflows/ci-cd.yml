@@ -215,6 +215,7 @@ jobs:
             echo "===== CREATE AI ENV PLACEHOLDER ====="
             cat > Ai_service/.env << EOF
             SECRET_KEY=${{ secrets.AI_SERVICE_SECRET_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             RABBITMQ_HOST=rabbitmq
             RABBITMQ_PORT=5672
             QDRANT_HOST=qdrant

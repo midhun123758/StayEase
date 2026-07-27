@@ -194,11 +194,12 @@ jobs:
             EOF
 
             echo "===== MIGRATE DJANGO ====="
-            docker-compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
+            sudo apt-get update && sudo apt-get install -y docker-compose-plugin || true
+            docker compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
 
             echo "===== GET/RENEW SSL CERTIFICATE ====="
             mkdir -p ./certbot/conf ./certbot/www
-            sudo docker-compose -f docker-compose.prod.yml stop nginx || true
+            sudo docker compose -f docker-compose.prod.yml stop nginx || true
             sudo docker run --rm -p 80:80 \
               -v /home/ubuntu/StayEase/certbot/conf:/etc/letsencrypt \
               -v /home/ubuntu/StayEase/certbot/www:/var/www/certbot \
@@ -210,7 +211,7 @@ jobs:
               -d stayeasee.duckdns.org || true
 
             echo "===== RESTART APP ====="
-            docker-compose -f docker-compose.prod.yml up -d --no-build --no-deps \
+            docker compose -f docker-compose.prod.yml up -d --no-build --no-deps \
               stayease_web \
               ai_service \
               celery \

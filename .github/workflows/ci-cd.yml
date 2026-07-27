@@ -197,7 +197,6 @@ jobs:
             docker-compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
 
             echo "===== GET/RENEW SSL CERTIFICATE ====="
-            sudo rm -rf ./certbot
             mkdir -p ./certbot/conf ./certbot/www
             sudo docker-compose -f docker-compose.prod.yml stop nginx || true
             sudo docker run --rm -p 80:80 \

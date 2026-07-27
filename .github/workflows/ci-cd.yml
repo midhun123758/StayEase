@@ -173,6 +173,7 @@ jobs:
             echo "===== CREATE DJANGO ENV ====="
             cat > StayEase/.env << EOF
             SECRET_KEY=${{ secrets.DJANGO_STAYEASE_SECRET_KEY }}
+            ALLOWED_HOSTS=localhost,127.0.0.1,stayeasee.duckdns.org
             DB_NAME=${{ secrets.STAYEASE_DB_NAME }}
             DB_USER=${{ secrets.STAYEASE_DB_USER }}
             DB_PASSWORD=${{ secrets.STAYEASE_DB_PASSWORD }}
@@ -193,6 +194,19 @@ jobs:
 
             echo "===== MIGRATE DJANGO ====="
             docker-compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
+
+            echo "===== GET/RENEW SSL CERTIFICATE ====="
+            mkdir -p ./certbot/conf ./certbot/www
+            sudo docker-compose -f docker-compose.prod.yml stop nginx || true
+            sudo docker run --rm -p 80:80 \
+              -v /home/ubuntu/StayEase/certbot/conf:/etc/letsencrypt \
+              -v /home/ubuntu/StayEase/certbot/www:/var/www/certbot \
+              certbot/certbot certonly \
+              --standalone \
+              --non-interactive \
+              --agree-tos \
+              -m admin@stayeasee.duckdns.org \
+              -d stayeasee.duckdns.org || true
 
             echo "===== RESTART APP ====="
             docker-compose -f docker-compose.prod.yml up -d --no-build --no-deps \

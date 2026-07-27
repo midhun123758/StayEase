@@ -4,6 +4,17 @@
 
 ---
 
+## 📖 Why this README exists?
+
+In the software engineering world, a `README.md` is considered the most important document in a project. It serves as:
+1. **The "Front Page" of the Project:** When employers, recruiters, or other developers look at your GitHub profile, the `README.md` is the very first thing they see. It acts like a landing page that shows off what your project is and how complex it is.
+2. **Onboarding Manual:** If another developer is hired to help build StayEase, this README tells them exactly how to install Docker, what environment variables they need, and how to run the project locally.
+3. **Personal Reference Guide:** Months from now, this document will serve as a personal manual to remember exactly how the microservices architecture, RabbitMQ connections, and AI Service operate.
+
+Think of this README as the **Instruction Manual** for your codebase!
+
+---
+
 ## 🚀 Key Features
 
 * **Multi-Role Access Control:** Custom dashboards and capabilities for `Admins`, `Owners` (Hostel Management), `Hostlers` (Staff), and `Clients` (Tenants).

@@ -194,7 +194,9 @@ jobs:
             EOF
 
             echo "===== MIGRATE DJANGO ====="
-            sudo apt-get update && sudo apt-get install -y docker-compose-plugin || true
+            sudo mkdir -p /usr/libexec/docker/cli-plugins/
+            sudo curl -sSL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
+            sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
             docker compose -f docker-compose.prod.yml run --rm stayease_web python manage.py migrate
 
             echo "===== GET/RENEW SSL CERTIFICATE ====="

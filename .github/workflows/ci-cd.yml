@@ -129,9 +129,10 @@ jobs:
             cd /home/ubuntu/StayEase
 
             echo "===== UPDATE REPO ON EC2 ====="
+            sudo chown -R $USER:$USER certbot/ || true
             git fetch origin main
             git reset --hard origin/main
-            git clean -fd
+            git clean -fd -e certbot/
 
             echo "===== SAFE EC2 CLEANUP ====="
             sudo growpart /dev/nvme0n1 1 || sudo growpart /dev/xvda 1 || true

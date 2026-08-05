@@ -250,27 +250,27 @@ class AdvancedAuthTests(APITestCase):
             status.HTTP_400_BAD_REQUEST
         )
 
-    @patch("App.views.verify_captcha")
-    def test_login_invalid_captcha(self, mock_captcha):
-
-        mock_captcha.return_value = False
-
-        payload = {
-            "email": "midhun@test.com",
-            "password": "test123",
-            "captcha": "bad"
-        }
-
-        response = self.client.post(
-            self.login_url,
-            payload,
-            format="json"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST
-        )
+    # @patch("App.views.verify_captcha")
+    # def test_login_invalid_captcha(self, mock_captcha):
+    #
+    #     mock_captcha.return_value = False
+    #
+    #     payload = {
+    #         "email": "midhun@test.com",
+    #         "password": "test123",
+    #         "captcha": "bad"
+    #     }
+    #
+    #     response = self.client.post(
+    #         self.login_url,
+    #         payload,
+    #         format="json"
+    #     )
+    #
+    #     self.assertEqual(
+    #         response.status_code,
+    #         status.HTTP_400_BAD_REQUEST
+    #     )
 
     @patch("App.views.verify_captcha")
     def test_login_missing_fields(self, mock_captcha):

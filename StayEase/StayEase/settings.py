@@ -28,7 +28,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://stay-ease-frontent-strv.vercel.app",
-    "https://stay-ease-frontent-g8kg.vercel.app"
+    "https://stay-ease-frontent-g8kg.vercel.app",
+    "https://stay-ease-g8kg.vercel.app"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -36,7 +37,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://stay-ease-frontent-strv.vercel.app",
-    "https://stay-ease-frontent-g8kg.vercel.app"
+    "https://stay-ease-frontent-g8kg.vercel.app",
+    "https://stay-ease-g8kg.vercel.app"
 ]
 
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None

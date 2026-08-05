@@ -1,4 +1,4 @@
-# Django
+﻿# Django
 Django
 djangorestframework
 psycopg2-binary

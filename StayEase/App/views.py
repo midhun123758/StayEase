@@ -26,17 +26,17 @@ class login_view(APIView):
             )
 
       
-        if not captcha:
-            return Response(
-                {'error': 'CAPTCHA is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # if not captcha:
+        #     return Response(
+        #         {'error': 'CAPTCHA is required'},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
-        if not verify_captcha(captcha):
-            return Response(
-                {'error': 'Invalid CAPTCHA'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # if not verify_captcha(captcha):
+        #     return Response(
+        #         {'error': 'Invalid CAPTCHA'},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         
         user_obj = User.objects.filter(email=email).first()
